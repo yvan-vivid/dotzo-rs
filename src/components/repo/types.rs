@@ -1,9 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use derive_more::derive::Constructor;
-use relative_path::RelativePathBuf;
 
-use crate::components::environment::home::Home;
+use crate::{components::environment::types::Environment, config::rc::types::Rc};
 
 #[derive(Debug, Constructor, PartialEq, Eq)]
 pub struct Repo {
@@ -17,10 +16,8 @@ impl AsRef<Path> for Repo {
 }
 
 impl Repo {
-    pub fn from_home(home: &Home) -> Self {
-        Self {
-            path: RelativePathBuf::from("_").to_path(home),
-        }
+    pub fn from_config(environment: &Environment, rc: &Rc, given: Option<PathBuf>) -> Self {
+        Self::new(given.unwrap_or_else(|| rc.repo.location.to_path(&environment.home)))
     }
 
     pub fn etc(&self) -> PathBuf {

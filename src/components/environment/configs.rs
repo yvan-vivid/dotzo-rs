@@ -1,13 +1,10 @@
-use derive_more::derive::From;
+use derive_more::derive::{Constructor, From};
 use inquire::{Confirm, InquireError};
 use log::{error, info};
-use relative_path::RelativePathBuf;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::components::actions::make_dir;
-
-use super::home::Home;
 
 #[derive(Debug, Error)]
 pub enum ConfigsError {
@@ -26,7 +23,7 @@ pub enum ConfigsError {
 
 pub type Result<T> = core::result::Result<T, ConfigsError>;
 
-#[derive(Debug, PartialEq, From, Eq)]
+#[derive(Debug, Constructor, PartialEq, From, Eq)]
 pub struct Configs(PathBuf);
 
 impl AsRef<Path> for Configs {
@@ -36,11 +33,6 @@ impl AsRef<Path> for Configs {
 }
 
 impl Configs {
-    pub fn from_home(home: &Home) -> Self {
-        let home = home.as_ref().to_path_buf();
-        Self(RelativePathBuf::from(".config").to_path(&home))
-    }
-
     pub fn create_config(&self) -> Result<()> {
         let do_create_config = Confirm::new(&format!("Create config at {}", self.0.display()))
             .with_default(false)

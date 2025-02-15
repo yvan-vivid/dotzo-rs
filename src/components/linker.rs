@@ -4,10 +4,11 @@ use relative_path::{PathExt, RelativePathBuf};
 use std::{collections::HashSet, path::PathBuf};
 
 use crate::{
-    dotzo::Dotzo,
     mapping::DotMap,
     util::fs::{LinkReader, MetadataChecks},
 };
+
+use super::environment::types::Environment;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum DotStatus {
@@ -56,10 +57,10 @@ pub struct DotLinker<'a, MC: MetadataChecks, LR: LinkReader> {
 }
 
 impl DotLink {
-    pub fn create(dotzo: &Dotzo, map: &DotMap) -> Result<Self> {
+    pub fn create(environment: &Environment, map: &DotMap) -> Result<Self> {
         // TODO: does canonicalize need to be injected?
         let source_path = map.source.canonicalize()?;
-        let data = dotzo.environment.destination_data(&map.target.destination);
+        let data = environment.destination_data(&map.target.destination);
         let target_directory = data.path;
         let target_path = target_directory.join(map.target.target.resolve(data.dot_default));
         let link_path = source_path.relative_to(target_directory)?;
@@ -100,12 +101,12 @@ impl<MC: MetadataChecks, LR: LinkReader> DotLinker<'_, MC, LR> {
 
     pub fn reconciliation<I: IntoIterator<Item = DotMap>>(
         &self,
-        repo: &Dotzo,
+        environment: &Environment,
         dot_maps: I,
     ) -> Result<DotReconciliation> {
         let mut recon = DotReconciliation::new();
         for dot_map in dot_maps {
-            let link = DotLink::create(repo, &dot_map)?;
+            let link = DotLink::create(environment, &dot_map)?;
             match self.check(&link)? {
                 DotStatus::Confirmed => recon.confirmed.insert(link),
                 DotStatus::Pending => recon.pending.insert(link),

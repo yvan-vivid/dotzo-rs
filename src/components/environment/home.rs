@@ -1,4 +1,4 @@
-use derive_more::derive::From;
+use derive_more::derive::{Constructor, From};
 use log::{error, info};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -14,7 +14,7 @@ pub enum HomeError {
 
 pub type Result<T> = core::result::Result<T, HomeError>;
 
-#[derive(Debug, PartialEq, From, Eq)]
+#[derive(Debug, Constructor, PartialEq, From, Eq)]
 pub struct Home(PathBuf);
 
 impl AsRef<Path> for Home {

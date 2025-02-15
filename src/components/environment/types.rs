@@ -22,9 +22,6 @@ pub enum EnvironmentError {
     #[error("IO error")]
     Io(#[from] std::io::Error),
 
-    #[error("Config file not found")]
-    ConfigFileNotFound,
-
     #[error("Home directory issue")]
     Home(#[from] HomeError),
 
@@ -40,19 +37,13 @@ pub struct DestinationData<'a> {
     pub path: &'a Path,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Constructor, PartialEq, Eq)]
 pub struct Environment {
     pub home: Home,
     pub config: Configs,
 }
 
 impl Environment {
-    pub fn new<P: AsRef<Path>>(home: P) -> Self {
-        let home = home.as_ref().to_path_buf().into();
-        let config = Configs::from_home(&home);
-        Self { home, config }
-    }
-
     pub fn destination_data<'a>(&'a self, destination: &Destination) -> DestinationData<'a> {
         match destination {
             Destination::Home => DestinationData::new(true, self.home.as_ref()),

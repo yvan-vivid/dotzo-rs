@@ -4,15 +4,15 @@ use log::{error, info};
 use crate::{
     components::{
         actions::make_link,
+        environment::types::Environment,
         linker::{DotLinker, DotReconciliation},
-        repo::tree::TreeTraverser,
+        repo::{tree::TreeTraverser, types::Repo},
     },
-    dotzo::Dotzo,
     util::fs::Fs,
 };
 use inquire::Confirm;
 
-pub fn sync_task<F: Fs>(dotzo: Dotzo, fs: F) -> Result<()> {
+pub fn sync_task<F: Fs>(environment: Environment, repo: Repo, fs: F) -> Result<()> {
     // Init
     //     1. load .dotrc settings or create .dotrc
     //     2. load options: home, .config, .clobber, ._
@@ -25,7 +25,7 @@ pub fn sync_task<F: Fs>(dotzo: Dotzo, fs: F) -> Result<()> {
     let linker = DotLinker::new(&fs, &fs);
     let traverser = TreeTraverser::new(&fs, &fs);
 
-    if let Err(e) = dotzo.check() {
+    if let Err(e) = environment.check() {
         error!("Can't meet requirements to run any further. Exiting... [{}]", e);
         return Ok(());
     } else {
@@ -34,12 +34,12 @@ pub fn sync_task<F: Fs>(dotzo: Dotzo, fs: F) -> Result<()> {
 
     // Get Mappings
     info!("Getting mappings from the repository.");
-    let dot_maps = traverser.traverse(dotzo.repo.etc())?;
+    let dot_maps = traverser.traverse(repo.etc())?;
     let link_count = dot_maps.len();
     info!("Got {} mappings", link_count);
 
     // Reconciliation
-    let DotReconciliation { confirmed, pending, .. } = linker.reconciliation(&dotzo, dot_maps.into_values())?;
+    let DotReconciliation { confirmed, pending, .. } = linker.reconciliation(&environment, dot_maps.into_values())?;
 
     if confirmed.len() == link_count {
         info!(

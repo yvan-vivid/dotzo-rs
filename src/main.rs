@@ -1,37 +1,45 @@
 mod app;
 mod components;
 mod config;
-mod dotzo;
+// mod dotzo;
 mod mapping;
 mod tasks;
 mod util;
 
-use std::path::PathBuf;
-
 use anyhow::Result;
-use components::environment::home::Home;
+use components::{
+    environment::inference::{DirsEnvironmentInference, EnvironmentInference},
+    repo::types::Repo,
+};
 
 use app::{
     cli::{parse_cli, Command},
     logging::setup_logging,
 };
-use dotzo::Dotzo;
 use tasks::{info::info_task, sync::sync_task};
 use util::fs::StandardFs;
 
 fn main() -> Result<()> {
     let cli = parse_cli();
-    setup_logging()?;
+    setup_logging(cli.verbose.log_level_filter())?;
 
+    // Injectable
     let standard_fs = StandardFs::new();
-    let home: Home = PathBuf::from("/home/hexxiiiz").into();
-    let dotzo = Dotzo::from_config_path(home)?;
+    let env_inference = DirsEnvironmentInference::new();
 
-    // TODO: SyncSecure => Make links into <home>/.ssh from secure repo
+    // Create dotzo
+    let home = env_inference.create_home(cli.home_dir)?;
+    let rc = env_inference.load_rc(&home)?;
+    let environment = env_inference.create(home, &rc, cli.config_dir)?;
+    let repo = Repo::from_config(&environment, &rc, cli.config);
+
     match cli.command {
-        Command::Init => unimplemented!(),
+        Command::Init => {
+            environment.check()?;
+            Ok(())
+        }
         Command::Setup => unimplemented!(),
-        Command::Sync => sync_task(dotzo, standard_fs),
-        Command::Info => info_task(dotzo),
+        Command::Sync => sync_task(environment, repo, standard_fs),
+        Command::Info => info_task(environment),
     }
 }

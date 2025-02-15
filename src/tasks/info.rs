@@ -1,8 +1,8 @@
-use crate::dotzo::Dotzo;
+use crate::components::environment::types::Environment;
 use anyhow::Result;
 
-pub fn info_task(dotzo: Dotzo) -> Result<()> {
+pub fn info_task(environment: Environment) -> Result<()> {
     // TODO: Better display
-    println!("Dotzo info:\n{:#?}", dotzo);
+    println!("Environment info:\n{:#?}", environment);
     Ok(())
 }

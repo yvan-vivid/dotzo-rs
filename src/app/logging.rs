@@ -4,7 +4,7 @@ use fern::Dispatch;
 use log::{Level, LevelFilter, SetLoggerError};
 use std::io::stderr;
 
-pub fn setup_logging() -> Result<(), SetLoggerError> {
+pub fn setup_logging(level: LevelFilter) -> Result<(), SetLoggerError> {
     Dispatch::new()
         .format(|out, message, record| {
             let color = match record.level() {
@@ -21,7 +21,7 @@ pub fn setup_logging() -> Result<(), SetLoggerError> {
                 message
             ))
         })
-        .level(LevelFilter::Info)
+        .level(level)
         .chain(stderr())
         .apply()
 }
