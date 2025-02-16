@@ -17,7 +17,7 @@ use app::{
     logging::setup_logging,
 };
 use tasks::{info::info_task, sync::sync_task};
-use util::fs::StandardFs;
+use util::{actions::DryFsActions, fs::StandardFs};
 
 fn main() -> Result<()> {
     let cli = parse_cli();
@@ -25,6 +25,7 @@ fn main() -> Result<()> {
 
     // Injectable
     let standard_fs = StandardFs::new();
+    let standard_actions = DryFsActions::new(&standard_fs);
     let env_inference = DirsEnvironmentInference::new();
 
     // Create dotzo
@@ -34,12 +35,9 @@ fn main() -> Result<()> {
     let repo = Repo::from_config(&environment, &rc, cli.config);
 
     match cli.command {
-        Command::Init => {
-            environment.check()?;
-            Ok(())
-        }
+        Command::Init => Ok(()),
         Command::Setup => unimplemented!(),
-        Command::Sync => sync_task(environment, repo, standard_fs),
+        Command::Sync => sync_task(environment, repo, &standard_fs, &standard_actions),
         Command::Info => info_task(environment),
     }
 }

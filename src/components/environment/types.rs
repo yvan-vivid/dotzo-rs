@@ -4,12 +4,17 @@ use log::error;
 use std::path::Path;
 use thiserror::Error;
 
-use crate::{config::file::ConfigFileReadError, mapping::Destination};
-
-use super::{
-    configs::{Configs, ConfigsError},
-    home::{Home, HomeError},
+use crate::{
+    config::file::ConfigFileReadError,
+    mapping::Destination,
+    util::{
+        actions::Actions,
+        checks::{DirectoryCheck, DirectoryCheckError},
+        fs::MetadataChecks,
+    },
 };
+
+use super::{configs::Configs, home::Home};
 
 #[derive(Debug, Error)]
 pub enum EnvironmentError {
@@ -22,11 +27,8 @@ pub enum EnvironmentError {
     #[error("IO error")]
     Io(#[from] std::io::Error),
 
-    #[error("Home directory issue")]
-    Home(#[from] HomeError),
-
-    #[error("Home directory issue")]
-    Configs(#[from] ConfigsError),
+    #[error("Directory check failure")]
+    DirectoryCheckFailure(#[from] DirectoryCheckError),
 }
 
 pub type Result<T> = std::result::Result<T, EnvironmentError>;
@@ -50,10 +52,13 @@ impl Environment {
             Destination::Config => DestinationData::new(false, self.config.as_ref()),
         }
     }
+}
 
-    pub fn check(&self) -> Result<()> {
-        self.home.check()?;
-        self.config.check()?;
-        Ok(())
-    }
+pub fn check_environment<MC: MetadataChecks, A: Actions>(
+    environment: &Environment,
+    checker: &DirectoryCheck<MC, A>,
+) -> Result<()> {
+    checker.check(&environment.home, false)?;
+    checker.check(&environment.config, true)?;
+    Ok(())
 }

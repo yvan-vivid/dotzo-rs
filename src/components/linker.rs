@@ -1,11 +1,15 @@
 use anyhow::Result;
 use derive_more::derive::Constructor;
+use log::{debug, info};
 use relative_path::{PathExt, RelativePathBuf};
-use std::{collections::HashSet, path::PathBuf};
+use std::{collections::HashSet, io::ErrorKind, path::PathBuf};
 
 use crate::{
     mapping::DotMap,
-    util::fs::{LinkReader, MetadataChecks},
+    util::{
+        actions::Actions,
+        fs::{LinkReader, MetadataChecks},
+    },
 };
 
 use super::environment::types::Environment;
@@ -51,9 +55,10 @@ pub struct DotReconciliation {
 }
 
 #[derive(Debug, Constructor)]
-pub struct DotLinker<'a, MC: MetadataChecks, LR: LinkReader> {
+pub struct DotLinker<'a, MC: MetadataChecks, LR: LinkReader, A: Actions> {
     metadata_checks: &'a MC,
     link_reader: &'a LR,
+    actions: &'a A,
 }
 
 impl DotLink {
@@ -74,7 +79,7 @@ impl DotReconciliation {
     }
 }
 
-impl<MC: MetadataChecks, LR: LinkReader> DotLinker<'_, MC, LR> {
+impl<MC: MetadataChecks, LR: LinkReader, A: Actions> DotLinker<'_, MC, LR, A> {
     pub fn check(&self, link: &DotLink) -> Result<DotStatus> {
         if !self.metadata_checks.exists(&link.target) {
             return Ok(DotStatus::Pending);
@@ -117,5 +122,33 @@ impl<MC: MetadataChecks, LR: LinkReader> DotLinker<'_, MC, LR> {
             };
         }
         Ok(recon)
+    }
+
+    pub fn link(&self, DotLink { target, link }: &DotLink) -> Result<()> {
+        let link_path = &link.to_path("");
+
+        debug!(
+            "Attempting to make link {} => {}",
+            target.display(),
+            link_path.display()
+        );
+        if !self.actions.try_symlink(target, link_path)? {
+            // TODO: Handle collision
+            if self.metadata_checks.is_symlink(target) {
+                let current_link = self.link_reader.read_link(target)?;
+                debug!(
+                    "Link {} alread exists, but points to {}",
+                    target.display(),
+                    current_link.display()
+                );
+            } else {
+                debug!("A file already exists at {}", target.display());
+            }
+
+            // TODO: Collision handling
+            return Err(std::io::Error::from(ErrorKind::AlreadyExists).into());
+        }
+        info!("Linked {} => {}", target.display(), link_path.display());
+        Ok(())
     }
 }

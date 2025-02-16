@@ -142,7 +142,7 @@ pub mod testing {
         fn read_link<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
             self.links
                 .get(path.as_ref())
-                .map(Clone::clone)
+                .cloned()
                 .ok_or_else(|| Error::new(ErrorKind::NotFound, "directory not found"))
         }
     }

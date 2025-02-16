@@ -3,16 +3,15 @@ use log::{error, info};
 
 use crate::{
     components::{
-        actions::make_link,
-        environment::types::Environment,
+        environment::types::{check_environment, Environment},
         linker::{DotLinker, DotReconciliation},
         repo::{tree::TreeTraverser, types::Repo},
     },
-    util::fs::Fs,
+    util::{actions::Actions, checks::DirectoryCheck, fs::Fs},
 };
 use inquire::Confirm;
 
-pub fn sync_task<F: Fs>(environment: Environment, repo: Repo, fs: F) -> Result<()> {
+pub fn sync_task<F: Fs, A: Actions>(environment: Environment, repo: Repo, fs: &F, actions: &A) -> Result<()> {
     // Init
     //     1. load .dotrc settings or create .dotrc
     //     2. load options: home, .config, .clobber, ._
@@ -22,14 +21,25 @@ pub fn sync_task<F: Fs>(environment: Environment, repo: Repo, fs: F) -> Result<(
     //     3. make `.dot_env` link with root
 
     // Components
-    let linker = DotLinker::new(&fs, &fs);
-    let traverser = TreeTraverser::new(&fs, &fs);
+    let linker = DotLinker::new(fs, fs, actions);
+    let traverser = TreeTraverser::new(fs, fs);
+    let directory_check = DirectoryCheck::new(fs, actions);
 
-    if let Err(e) = environment.check() {
-        error!("Can't meet requirements to run any further. Exiting... [{}]", e);
+    if let Err(e) = check_environment(&environment, &directory_check) {
+        error!(
+            "Environment can't meet requirements to run any further. Exiting... [{}]",
+            e
+        );
         return Ok(());
     } else {
         info!("Checked dotzo environment")
+    }
+
+    if let Err(e) = repo.check() {
+        error!("Repo can't meet requirements to run any further. Exiting... [{}]", e);
+        return Ok(());
+    } else {
+        info!("Checked dotzo repo")
     }
 
     // Get Mappings
@@ -60,7 +70,7 @@ pub fn sync_task<F: Fs>(environment: Environment, repo: Repo, fs: F) -> Result<(
         if do_create_links {
             info!("Confirmed: creating links");
             for dot_link in pending {
-                make_link(&dot_link)?
+                linker.link(&dot_link)?
             }
         } else {
             info!("Will not create links")
