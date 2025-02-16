@@ -4,13 +4,12 @@ use thiserror::Error;
 
 use crate::util::fs::{LinkReader, MetadataChecks};
 
-use super::{
-    environment::{
-        checks::{EnvironmentChecker, EnvironmentCheckerError},
-        types::Environment,
-    },
-    repo::types::{Repo, RepoError},
+use crate::components::{
+    environment::checks::{EnvironmentChecker, EnvironmentCheckerError},
+    repo::types::RepoError,
 };
+
+use super::types::Dotzo;
 
 #[derive(Debug, Error)]
 pub enum DotzoError {
@@ -29,8 +28,8 @@ pub struct DotzoChecker<'a, MC: MetadataChecks, LR: LinkReader> {
 }
 
 impl<MC: MetadataChecks, LR: LinkReader> DotzoChecker<'_, MC, LR> {
-    pub fn check(&self, environment: &Environment, _repo: &Repo) -> Result<()> {
-        self.environment.check(environment)?;
+    pub fn check(&self, dotzo: &Dotzo) -> Result<()> {
+        self.environment.check(&dotzo.environment)?;
         Ok(())
     }
 }

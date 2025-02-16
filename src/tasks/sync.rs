@@ -3,17 +3,17 @@ use log::{error, info};
 
 use crate::{
     components::{
-        dotzo::DotzoChecker,
-        environment::{checks::EnvironmentChecker, types::Environment},
+        dotzo::{checks::DotzoChecker, types::Dotzo},
+        environment::checks::EnvironmentChecker,
         linker::{DotLinker, DotReconciliation},
-        repo::{tree::TreeTraverser, types::Repo},
+        repo::tree::TreeTraverser,
         validation::{containment::ContainmentCheck, directory::DirectoryCheck},
     },
     util::{actions::Actions, fs::FsRead},
 };
 use inquire::Confirm;
 
-pub fn sync_task<F: FsRead, A: Actions>(environment: Environment, repo: Repo, fs: &F, actions: &A) -> Result<()> {
+pub fn sync_task<F: FsRead, A: Actions>(dotzo: Dotzo, fs: &F, actions: &A) -> Result<()> {
     // Components
     let linker = DotLinker::new(fs, fs, actions);
     let traverser = TreeTraverser::new(fs, fs);
@@ -24,7 +24,7 @@ pub fn sync_task<F: FsRead, A: Actions>(environment: Environment, repo: Repo, fs
 
     // Verification
     info!("Checking the environment");
-    if let Err(e) = dotzo_checker.check(&environment, &repo) {
+    if let Err(e) = dotzo_checker.check(&dotzo) {
         error!(
             "Environment can't meet requirements to run any further. Exiting... [{}]",
             e
@@ -36,13 +36,14 @@ pub fn sync_task<F: FsRead, A: Actions>(environment: Environment, repo: Repo, fs
 
     // Get Mappings
     info!("Getting mappings from the repository.");
-    let dot_maps = traverser.traverse(repo.etc())?;
+    let dot_maps = traverser.traverse(dotzo.repo.etc())?;
     let link_count = dot_maps.len();
     info!("Got {} mappings", link_count);
 
     // Reconciliation
     info!("Doing mapping reconciliation.");
-    let DotReconciliation { confirmed, pending, .. } = linker.reconciliation(&environment, dot_maps.into_values())?;
+    let DotReconciliation { confirmed, pending, .. } =
+        linker.reconciliation(&dotzo.environment, dot_maps.into_values())?;
 
     if confirmed.len() == link_count {
         info!(

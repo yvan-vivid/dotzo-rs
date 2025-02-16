@@ -1,13 +1,13 @@
 mod app;
 mod components;
 mod config;
-// mod dotzo;
 mod mapping;
 mod tasks;
 mod util;
 
 use anyhow::Result;
 use components::{
+    dotzo::types::Dotzo,
     environment::inference::{DirsEnvironmentInference, EnvironmentInference},
     repo::types::Repo,
 };
@@ -17,7 +17,7 @@ use app::{
     logging::setup_logging,
 };
 use tasks::{info::info_task, sync::sync_task};
-use util::{actions::DryFsActions, fs::StandardFsRead, prompting::InquirePrompter};
+use util::{actions::DryFsActions, fs::StandardFsRead};
 
 fn main() -> Result<()> {
     let cli = parse_cli();
@@ -27,7 +27,6 @@ fn main() -> Result<()> {
     let standard_fs_read = StandardFsRead::new();
     let standard_actions = DryFsActions::new(&standard_fs_read);
     let env_inference = DirsEnvironmentInference::new();
-    let prompter = InquirePrompter::new();
 
     // Create dotzo
     let home = env_inference.create_home(cli.home_dir)?;
@@ -38,7 +37,7 @@ fn main() -> Result<()> {
     match cli.command {
         Command::Init => Ok(()),
         Command::Setup => unimplemented!(),
-        Command::Sync => sync_task(environment, repo, &standard_fs_read, &standard_actions),
+        Command::Sync => sync_task(Dotzo::new(environment, repo), &standard_fs_read, &standard_actions),
         Command::Info => info_task(environment, &standard_fs_read),
     }
 }
