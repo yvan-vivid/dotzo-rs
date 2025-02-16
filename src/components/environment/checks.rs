@@ -4,37 +4,33 @@ use crate::{
         containment::{ContainmentCheck, ContainmentError},
         directory::{DirectoryCheck, DirectoryCheckError},
     },
-    util::{
-        actions::Actions,
-        fs::{LinkReader, MetadataChecks},
-        prompting::Prompter,
-    },
+    util::fs::{LinkReader, MetadataChecks},
 };
 use derive_more::derive::Constructor;
 use log::error;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum EnvironmentCheckerError<E: std::error::Error> {
+pub enum EnvironmentCheckerError {
     #[error("Directory check failure")]
-    DirectoryCheckFailure(#[from] DirectoryCheckError<E>),
+    DirectoryCheckFailure(#[from] DirectoryCheckError),
 
     #[error("Containment check failure")]
     ContainmentCheckFailure(#[from] ContainmentError),
 }
 
-pub type Result<T, E> = std::result::Result<T, EnvironmentCheckerError<E>>;
+pub type Result<T> = std::result::Result<T, EnvironmentCheckerError>;
 
 #[derive(Debug, Constructor)]
-pub struct EnvironmentChecker<'a, MC: MetadataChecks, LR: LinkReader, A: Actions, PR: Prompter> {
-    checker: &'a DirectoryCheck<'a, MC, A, PR>,
+pub struct EnvironmentChecker<'a, MC: MetadataChecks, LR: LinkReader> {
+    checker: &'a DirectoryCheck<'a, MC>,
     containment: &'a ContainmentCheck<'a, MC, LR>,
 }
 
-impl<MC: MetadataChecks, A: Actions, LR: LinkReader, PR: Prompter> EnvironmentChecker<'_, MC, LR, A, PR> {
-    pub fn check(&self, environment: &Environment) -> Result<(), PR::Error> {
-        self.checker.check(&environment.home, false)?;
-        self.checker.check(&environment.config, true)?;
+impl<MC: MetadataChecks, LR: LinkReader> EnvironmentChecker<'_, MC, LR> {
+    pub fn check(&self, environment: &Environment) -> Result<()> {
+        self.checker.check(&environment.home)?;
+        self.checker.check(&environment.config)?;
         self.containment
             .check(&environment.config, &environment.home)
             .inspect_err(|_| error!("The config directory is not inside of the home tree."))?;

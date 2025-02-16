@@ -3,52 +3,35 @@ use log::{error, info};
 
 use crate::{
     components::{
+        dotzo::DotzoChecker,
         environment::{checks::EnvironmentChecker, types::Environment},
         linker::{DotLinker, DotReconciliation},
         repo::{tree::TreeTraverser, types::Repo},
         validation::{containment::ContainmentCheck, directory::DirectoryCheck},
     },
-    util::{actions::Actions, fs::FsRead, prompting::Prompter},
+    util::{actions::Actions, fs::FsRead},
 };
 use inquire::Confirm;
 
-pub fn sync_task<F: FsRead, A: Actions, PR: Prompter>(
-    environment: Environment,
-    repo: Repo,
-    fs: &F,
-    actions: &A,
-    prompter: &PR,
-) -> Result<()> {
-    // Init
-    //     1. load .dotrc settings or create .dotrc
-    //     2. load options: home, .config, .clobber, ._
-    // Init Home
-    //     1. make .config and .clobber
-    //     2. root link
-    //     3. make `.dot_env` link with root
-
+pub fn sync_task<F: FsRead, A: Actions>(environment: Environment, repo: Repo, fs: &F, actions: &A) -> Result<()> {
     // Components
     let linker = DotLinker::new(fs, fs, actions);
     let traverser = TreeTraverser::new(fs, fs);
-    let directory_check = DirectoryCheck::new(fs, actions, prompter);
+    let directory_check = DirectoryCheck::new(fs);
     let containment_check = ContainmentCheck::new(fs, fs);
     let environment_checker = EnvironmentChecker::new(&directory_check, &containment_check);
+    let dotzo_checker = DotzoChecker::new(environment_checker);
 
-    if let Err(e) = environment_checker.check(&environment) {
+    // Verification
+    info!("Checking the environment");
+    if let Err(e) = dotzo_checker.check(&environment, &repo) {
         error!(
             "Environment can't meet requirements to run any further. Exiting... [{}]",
             e
         );
         return Ok(());
     } else {
-        info!("Checked dotzo environment")
-    }
-
-    if let Err(e) = repo.check() {
-        error!("Repo can't meet requirements to run any further. Exiting... [{}]", e);
-        return Ok(());
-    } else {
-        info!("Checked dotzo repo")
+        info!("Dotzo environment checked")
     }
 
     // Get Mappings
@@ -58,6 +41,7 @@ pub fn sync_task<F: FsRead, A: Actions, PR: Prompter>(
     info!("Got {} mappings", link_count);
 
     // Reconciliation
+    info!("Doing mapping reconciliation.");
     let DotReconciliation { confirmed, pending, .. } = linker.reconciliation(&environment, dot_maps.into_values())?;
 
     if confirmed.len() == link_count {
@@ -67,7 +51,11 @@ pub fn sync_task<F: FsRead, A: Actions, PR: Prompter>(
         );
         return Ok(());
     }
-    info!("Confirmed {} of {} already correct links.", confirmed.len(), link_count);
+    info!(
+        "Confirmed {} of {} links are already correct.",
+        confirmed.len(),
+        link_count
+    );
 
     if !pending.is_empty() {
         info!("Can create {} of {} new links.", pending.len(), link_count);

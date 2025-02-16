@@ -38,7 +38,7 @@ fn main() -> Result<()> {
     match cli.command {
         Command::Init => Ok(()),
         Command::Setup => unimplemented!(),
-        Command::Sync => sync_task(environment, repo, &standard_fs_read, &standard_actions, &prompter),
-        Command::Info => info_task(environment, &standard_fs_read, &standard_actions, &prompter),
+        Command::Sync => sync_task(environment, repo, &standard_fs_read, &standard_actions),
+        Command::Info => info_task(environment, &standard_fs_read),
     }
 }

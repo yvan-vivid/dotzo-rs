@@ -40,7 +40,7 @@ impl Target {
         if self.dot.unwrap_or(dot_default) {
             format!(".{}", self.name)
         } else {
-            format!("{}", self.name)
+            self.name.to_string()
         }
     }
 }
