@@ -1,5 +1,5 @@
 use derive_more::derive::Constructor;
-use log::debug;
+use log::{debug, info};
 use std::path::PathBuf;
 use thiserror::Error;
 
@@ -30,7 +30,11 @@ pub trait EnvironmentInference {
 
     fn create_home(&self, given: Option<PathBuf>) -> Result<Home> {
         given
-            .or_else(|| self.home())
+            .inspect(|p| info!("Explicitly setting home with given: {}", p.display()))
+            .or_else(|| {
+                info!("Inferring home");
+                self.home()
+            })
             .ok_or(EnvironmentInferenceError::CannotInferHome)
             .map(Home::new)
     }
@@ -38,7 +42,11 @@ pub trait EnvironmentInference {
     fn create_config(&self, home: &Home, given: Option<PathBuf>) -> Configs {
         Configs::new(
             given
-                .or_else(|| self.config())
+                .inspect(|p| info!("Explicitly setting config directory with given: {}", p.display()))
+                .or_else(|| {
+                    info!("Inferring config directory");
+                    self.config()
+                })
                 .unwrap_or_else(|| home.as_ref().join(".config")),
         )
     }

@@ -6,12 +6,19 @@ use crate::{
         environment::{checks::EnvironmentChecker, types::Environment},
         linker::{DotLinker, DotReconciliation},
         repo::{tree::TreeTraverser, types::Repo},
+        validation::{containment::ContainmentCheck, directory::DirectoryCheck},
     },
-    util::{actions::Actions, checks::DirectoryCheck, fs::Fs},
+    util::{actions::Actions, fs::FsRead, prompting::Prompter},
 };
 use inquire::Confirm;
 
-pub fn sync_task<F: Fs, A: Actions>(environment: Environment, repo: Repo, fs: &F, actions: &A) -> Result<()> {
+pub fn sync_task<F: FsRead, A: Actions, PR: Prompter>(
+    environment: Environment,
+    repo: Repo,
+    fs: &F,
+    actions: &A,
+    prompter: &PR,
+) -> Result<()> {
     // Init
     //     1. load .dotrc settings or create .dotrc
     //     2. load options: home, .config, .clobber, ._
@@ -23,8 +30,9 @@ pub fn sync_task<F: Fs, A: Actions>(environment: Environment, repo: Repo, fs: &F
     // Components
     let linker = DotLinker::new(fs, fs, actions);
     let traverser = TreeTraverser::new(fs, fs);
-    let directory_check = DirectoryCheck::new(fs, actions);
-    let environment_checker = EnvironmentChecker::new(&directory_check);
+    let directory_check = DirectoryCheck::new(fs, actions, prompter);
+    let containment_check = ContainmentCheck::new(fs, fs);
+    let environment_checker = EnvironmentChecker::new(&directory_check, &containment_check);
 
     if let Err(e) = environment_checker.check(&environment) {
         error!(

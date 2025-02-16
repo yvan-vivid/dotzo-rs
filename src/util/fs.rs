@@ -25,15 +25,16 @@ pub trait DirectoryListing {
 
 pub trait LinkReader {
     fn read_link<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf>;
+    fn canonicalize<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf>;
 }
 
-pub trait Fs: MetadataChecks + DirectoryListing + LinkReader {}
-impl<T: MetadataChecks + DirectoryListing + LinkReader> Fs for T {}
+pub trait FsRead: MetadataChecks + DirectoryListing + LinkReader {}
+impl<T: MetadataChecks + DirectoryListing + LinkReader> FsRead for T {}
 
 #[derive(Debug, Constructor)]
-pub struct StandardFs {}
+pub struct StandardFsRead {}
 
-impl MetadataChecks for StandardFs {
+impl MetadataChecks for StandardFsRead {
     fn is_dir<P: AsRef<Path>>(&self, path: P) -> bool {
         path.as_ref().is_dir()
     }
@@ -51,7 +52,7 @@ impl MetadataChecks for StandardFs {
     }
 }
 
-impl DirectoryListing for StandardFs {
+impl DirectoryListing for StandardFsRead {
     type Iter = Box<dyn DirEntryIterator>;
     fn read_dir<P: AsRef<Path>>(&self, path: P) -> std::io::Result<Self::Iter> {
         Ok(Box::new(
@@ -62,9 +63,13 @@ impl DirectoryListing for StandardFs {
     }
 }
 
-impl LinkReader for StandardFs {
+impl LinkReader for StandardFsRead {
     fn read_link<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
         path.as_ref().read_link()
+    }
+
+    fn canonicalize<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
+        path.as_ref().canonicalize()
     }
 }
 
@@ -144,6 +149,11 @@ pub mod testing {
                 .get(path.as_ref())
                 .cloned()
                 .ok_or_else(|| Error::new(ErrorKind::NotFound, "directory not found"))
+        }
+
+        fn canonicalize<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
+            // TODO: Complete
+            Ok(path.as_ref().to_path_buf())
         }
     }
 }

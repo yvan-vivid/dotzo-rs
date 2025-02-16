@@ -67,15 +67,19 @@ impl ConfigFormat {
     }
 }
 
+// There are a couple APIs here that are not currently used, but I would like to
+// hang onto them for now.
 impl ConfigType {
     pub const fn default_yaml(path: PathBuf) -> Self {
         Self::new(path, Some(ConfigFormat::Yaml))
     }
 
+    #[allow(dead_code)]
     pub const fn default_json(path: PathBuf) -> Self {
         Self::new(path, Some(ConfigFormat::Json))
     }
 
+    #[allow(dead_code)]
     pub const fn no_default(path: PathBuf) -> Self {
         Self::new(path, None)
     }
@@ -136,6 +140,7 @@ impl ConfigFile {
 pub trait ReadFromConfig: DeserializeOwned {
     fn config_type() -> ConfigType;
 
+    #[allow(dead_code)]
     fn read_from_path<P: AsRef<Path>>(path: P) -> Result<Option<Self>> {
         Self::config_type()
             .get_config_file(path)

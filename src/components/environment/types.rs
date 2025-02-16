@@ -1,35 +1,7 @@
 use derive_more::derive::{Constructor, From};
-use inquire::InquireError;
-use log::error;
 use std::path::{Path, PathBuf};
-use thiserror::Error;
 
-use crate::{
-    config::file::ConfigFileReadError,
-    mapping::Destination,
-    util::{
-        actions::Actions,
-        checks::{DirectoryCheck, DirectoryCheckError},
-        fs::MetadataChecks,
-    },
-};
-
-#[derive(Debug, Error)]
-pub enum EnvironmentError {
-    #[error("Config file reading error reading config file")]
-    ConfigFileReading(#[from] ConfigFileReadError),
-
-    #[error("Prompting error")]
-    Prompting(#[from] InquireError),
-
-    #[error("IO error")]
-    Io(#[from] std::io::Error),
-
-    #[error("Directory check failure")]
-    DirectoryCheckFailure(#[from] DirectoryCheckError),
-}
-
-pub type Result<T> = std::result::Result<T, EnvironmentError>;
+use crate::mapping::Destination;
 
 #[derive(Debug, Constructor, PartialEq, From, Eq)]
 pub struct Home(PathBuf);

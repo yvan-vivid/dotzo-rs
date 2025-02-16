@@ -1,16 +1,16 @@
 use derive_more::Constructor;
-use inquire::{Confirm, InquireError};
 use log::{error, info};
 use std::path::Path;
 use thiserror::Error;
 
-use super::{
+use crate::util::{
     actions::{ActionError, Actions},
     fs::MetadataChecks,
+    prompting::Prompter,
 };
 
 #[derive(Debug, Error)]
-pub enum DirectoryCheckError {
+pub enum DirectoryCheckError<E: std::error::Error> {
     #[error("Given directory does not exist")]
     DoesNotExist,
 
@@ -18,28 +18,28 @@ pub enum DirectoryCheckError {
     IsNotADirectory,
 
     #[error("Inquire error")]
-    InquireError(#[from] InquireError),
+    PromptError(E),
 
     #[error("File system action error")]
     ActionError(#[from] ActionError),
 }
 
-pub type Result<T> = core::result::Result<T, DirectoryCheckError>;
+pub type Result<T, E> = core::result::Result<T, DirectoryCheckError<E>>;
 
 #[derive(Debug, Constructor)]
-pub struct DirectoryCheck<'a, MC: MetadataChecks, A: Actions> {
+pub struct DirectoryCheck<'a, MC: MetadataChecks, A: Actions, PR: Prompter> {
     metadata_checks: &'a MC,
     actions: &'a A,
+    prompter: &'a PR,
 }
 
-impl<MC: MetadataChecks, A: Actions> DirectoryCheck<'_, MC, A> {
-    pub fn create<P: AsRef<Path>>(&self, path: P) -> Result<bool> {
+impl<MC: MetadataChecks, A: Actions, PR: Prompter> DirectoryCheck<'_, MC, A, PR> {
+    pub fn create<P: AsRef<Path>>(&self, path: P) -> Result<bool, PR::Error> {
         let path = path.as_ref();
-
-        // TODO: Inject
-        let do_create_config = Confirm::new(&format!("Create config at {}", path.display()))
-            .with_default(false)
-            .prompt()?;
+        let do_create_config = self
+            .prompter
+            .confirm(format!("Create config at {}", path.display()), false)
+            .map_err(DirectoryCheckError::PromptError)?;
 
         if do_create_config {
             info!("Creating config at {}", path.display());
@@ -52,7 +52,7 @@ impl<MC: MetadataChecks, A: Actions> DirectoryCheck<'_, MC, A> {
         }
     }
 
-    pub fn check<P: AsRef<Path>>(&self, path: P, should_create: bool) -> Result<()> {
+    pub fn check<P: AsRef<Path>>(&self, path: P, should_create: bool) -> Result<(), PR::Error> {
         let path = path.as_ref();
         if self.metadata_checks.is_dir(path) {
             info!("Confirmed at: {}", path.display());

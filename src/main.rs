@@ -17,16 +17,17 @@ use app::{
     logging::setup_logging,
 };
 use tasks::{info::info_task, sync::sync_task};
-use util::{actions::DryFsActions, fs::StandardFs};
+use util::{actions::DryFsActions, fs::StandardFsRead, prompting::InquirePrompter};
 
 fn main() -> Result<()> {
     let cli = parse_cli();
     setup_logging(cli.verbose.log_level_filter())?;
 
     // Injectable
-    let standard_fs = StandardFs::new();
-    let standard_actions = DryFsActions::new(&standard_fs);
+    let standard_fs_read = StandardFsRead::new();
+    let standard_actions = DryFsActions::new(&standard_fs_read);
     let env_inference = DirsEnvironmentInference::new();
+    let prompter = InquirePrompter::new();
 
     // Create dotzo
     let home = env_inference.create_home(cli.home_dir)?;
@@ -37,7 +38,7 @@ fn main() -> Result<()> {
     match cli.command {
         Command::Init => Ok(()),
         Command::Setup => unimplemented!(),
-        Command::Sync => sync_task(environment, repo, &standard_fs, &standard_actions),
-        Command::Info => info_task(environment),
+        Command::Sync => sync_task(environment, repo, &standard_fs_read, &standard_actions, &prompter),
+        Command::Info => info_task(environment, &standard_fs_read, &standard_actions, &prompter),
     }
 }

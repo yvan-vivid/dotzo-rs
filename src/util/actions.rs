@@ -32,9 +32,9 @@ pub trait Actions {
 }
 
 #[derive(Debug, Constructor)]
-pub struct FsActions {}
+pub struct StandardFsActions {}
 
-impl Actions for FsActions {
+impl Actions for StandardFsActions {
     fn make_dir<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let path = path.as_ref();
         info!("Creating directory: {}", path.display());
