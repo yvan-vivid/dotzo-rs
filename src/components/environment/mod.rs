@@ -1,4 +1,3 @@
-pub mod configs;
-pub mod home;
+pub mod checks;
 pub mod inference;
 pub mod types;

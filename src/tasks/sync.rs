@@ -3,7 +3,7 @@ use log::{error, info};
 
 use crate::{
     components::{
-        environment::types::{check_environment, Environment},
+        environment::{checks::EnvironmentChecker, types::Environment},
         linker::{DotLinker, DotReconciliation},
         repo::{tree::TreeTraverser, types::Repo},
     },
@@ -24,8 +24,9 @@ pub fn sync_task<F: Fs, A: Actions>(environment: Environment, repo: Repo, fs: &F
     let linker = DotLinker::new(fs, fs, actions);
     let traverser = TreeTraverser::new(fs, fs);
     let directory_check = DirectoryCheck::new(fs, actions);
+    let environment_checker = EnvironmentChecker::new(&directory_check);
 
-    if let Err(e) = check_environment(&environment, &directory_check) {
+    if let Err(e) = environment_checker.check(&environment) {
         error!(
             "Environment can't meet requirements to run any further. Exiting... [{}]",
             e

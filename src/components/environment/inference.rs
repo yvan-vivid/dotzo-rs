@@ -8,7 +8,7 @@ use crate::config::{
     rc::types::Rc,
 };
 
-use super::{configs::Configs, home::Home, types::Environment};
+use super::types::{Configs, Environment, Home};
 
 #[derive(Debug, Error)]
 pub enum EnvironmentInferenceError {
