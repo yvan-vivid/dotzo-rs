@@ -1,6 +1,6 @@
 # Simple environment to emulate default linux install
 FROM alpine:latest
-RUN apk add vim tree sudo tmux zsh openssh-client
+RUN apk add vim tree sudo tmux zsh openssh-client sheldon
 
 # Workaround for a sudo issue
 RUN echo "Set disable_coredump false" >> /etc/sudo.conf
@@ -21,3 +21,4 @@ ENV PATH="$dotzo_dev:${PATH}"
 WORKDIR /home/tester
 
 COPY ./target/x86_64-unknown-linux-musl/release/dotzo /usr/bin/dotzo
+COPY ./test/_ /home/tester/_
