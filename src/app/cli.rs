@@ -26,6 +26,10 @@ pub struct Cli {
     #[arg(long)]
     pub config: Option<PathBuf>,
 
+    /// Dry run
+    #[arg(long)]
+    pub dry_run: bool,
+
     /// Level of verbosity - defaults to warn, -v for info, -vv for debug
     #[command(flatten)]
     pub verbose: Verbosity<WarnLevel>,
@@ -33,9 +37,8 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    Init,
-    Setup,
-
+    // Init,
+    // Setup,
     /// Sync dotfiles from repo to home environment
     Sync,
 

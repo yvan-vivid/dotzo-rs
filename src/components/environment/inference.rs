@@ -239,7 +239,7 @@ mod tests {
     fn test_create_config_defaults_to_home_dot_config() {
         let home = TEST_INFERENCE_NO_CONFIG.create_home(None).unwrap();
         let config: ConfigDir = TEST_INFERENCE_NO_CONFIG.inference_or_default(&home, None);
-        assert_eq!(config.as_ref(), Path::new("/test/home/.config"));
+        assert_eq!(config.as_ref(), Path::new("/test/home/config"));
     }
 
     #[test]

@@ -81,34 +81,65 @@ pub mod testing {
     use super::*;
 
     #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-    pub struct TestFile {
-        pub name: String,
-        pub is_file: bool,
-        pub is_dir: bool,
+    pub enum TestFile {
+        Regular,
+        Directory,
+        Symlink(PathBuf),
     }
 
     #[derive(Debug, PartialEq, Eq)]
     pub struct TestFs {
         pub tree: HashMap<PathBuf, HashSet<PathBuf>>,
         pub files: HashMap<PathBuf, TestFile>,
-        pub links: HashMap<PathBuf, PathBuf>,
     }
 
-    impl TestFile {
-        pub fn file(name: String) -> Self {
-            Self {
-                name,
-                is_file: true,
-                is_dir: false,
+    impl TestFs {
+        pub fn new<I: IntoIterator<Item = (PathBuf, TestFile)>>(it: I) -> Self {
+            let mut tree: HashMap<PathBuf, HashSet<PathBuf>> = HashMap::new();
+            let mut files = HashMap::new();
+            for (path, file) in it {
+                // TODO: Normalize path
+                if let TestFile::Directory = file {
+                    tree.insert(path.clone(), Default::default());
+                }
+
+                let mut member = path.clone();
+                while let Some(directory) = member.parent() {
+                    let d = directory.to_path_buf();
+                    tree.entry(d.clone()).or_default().insert(member.clone());
+                    member = d;
+                }
+
+                files.insert(path, file);
             }
+
+            Self { tree, files }
         }
 
-        pub fn directory(name: String) -> Self {
-            Self {
-                name,
-                is_file: false,
-                is_dir: true,
+        pub fn get_file(&self, path: &PathBuf) -> std::io::Result<TestFile> {
+            Ok(self
+                .files
+                .get(path)
+                .cloned()
+                .ok_or_else(|| Error::from(ErrorKind::NotFound))?)
+        }
+
+        pub fn follow_links<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
+            let path = path.as_ref().to_path_buf();
+            let mut visited: HashSet<PathBuf> = Default::default();
+            visited.insert(path.to_path_buf());
+
+            let mut current_path = path;
+            let mut current = self.get_file(&current_path)?;
+            while let TestFile::Symlink(linked) = current {
+                if visited.contains(&linked) {
+                    return Err(Error::from(ErrorKind::TooManyLinks));
+                }
+                visited.insert(linked.clone());
+                current_path = linked;
+                current = self.get_file(&current_path)?;
             }
+            Ok(current_path)
         }
     }
 
@@ -119,15 +150,21 @@ pub mod testing {
         }
 
         fn is_file<P: AsRef<Path>>(&self, path: P) -> bool {
-            self.files.get(path.as_ref()).is_some_and(|tf| tf.is_file)
+            self.files
+                .get(path.as_ref())
+                .is_some_and(|tf| if let TestFile::Regular = tf { true } else { false })
         }
 
         fn is_symlink<P: AsRef<Path>>(&self, path: P) -> bool {
-            self.links.contains_key(path.as_ref())
+            if let Some(TestFile::Symlink(_)) = self.files.get(path.as_ref()) {
+                true
+            } else {
+                false
+            }
         }
 
         fn exists<P: AsRef<Path>>(&self, path: P) -> bool {
-            self.files.contains_key(path.as_ref()) || self.links.contains_key(path.as_ref())
+            self.files.contains_key(path.as_ref())
         }
     }
 
@@ -145,10 +182,7 @@ pub mod testing {
 
     impl LinkReader for TestFs {
         fn read_link<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
-            self.links
-                .get(path.as_ref())
-                .cloned()
-                .ok_or_else(|| Error::new(ErrorKind::NotFound, "directory not found"))
+            self.follow_links(path)
         }
 
         fn canonicalize<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {

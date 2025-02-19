@@ -1,4 +1,4 @@
-use derive_more::derive::{AsRef, Constructor, From};
+use derive_more::derive::{AsRef, Constructor, Display, From};
 use relative_path::RelativePathBuf;
 use std::path::{Path, PathBuf};
 

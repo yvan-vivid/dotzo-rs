@@ -1,38 +1,29 @@
 use anyhow::Result;
-use log::{error, info};
+use log::info;
 
 use crate::{
     components::{
-        dotzo::{checks::DotzoChecker, types::Dotzo},
-        environment::checks::EnvironmentChecker,
+        dotzo::types::Dotzo,
         linker::{DotLinker, DotReconciliation},
         repo::tree::TreeTraverser,
-        validation::{containment::ContainmentCheck, directory::DirectoryCheck},
     },
-    util::{actions::Actions, fs::FsRead},
+    util::{
+        actions::Actions,
+        fs::{DirectoryListing, LinkReader, MetadataChecks},
+    },
 };
 use inquire::Confirm;
 
-pub fn sync_task<F: FsRead, A: Actions>(dotzo: Dotzo, fs: &F, actions: &A) -> Result<()> {
+pub fn sync_task<MC: MetadataChecks, LR: LinkReader, DL: DirectoryListing, A: Actions>(
+    dotzo: Dotzo,
+    mc: &MC,
+    lr: &LR,
+    dl: &DL,
+    actions: &A,
+) -> Result<()> {
     // Components
-    let linker = DotLinker::new(fs, fs, actions);
-    let traverser = TreeTraverser::new(fs, fs);
-    let directory_check = DirectoryCheck::new(fs);
-    let containment_check = ContainmentCheck::new(fs, fs);
-    let environment_checker = EnvironmentChecker::new(&directory_check, &containment_check);
-    let dotzo_checker = DotzoChecker::new(environment_checker);
-
-    // Verification
-    info!("Checking the environment");
-    if let Err(e) = dotzo_checker.check(&dotzo) {
-        error!(
-            "Environment can't meet requirements to run any further. Exiting... [{}]",
-            e
-        );
-        return Ok(());
-    } else {
-        info!("Dotzo environment checked")
-    }
+    let linker = DotLinker::new(mc, lr, actions);
+    let traverser = TreeTraverser::new(dl, mc);
 
     // Get Mappings
     info!("Getting mappings from the repository.");

@@ -124,33 +124,17 @@ mod test {
         )
     });
 
-    static TEST_TREE: LazyLock<TestFs> = LazyLock::new(|| TestFs {
-        files: [
-            (PathBuf::from("path/to/in_home"), TestFile::file("in_home".into())),
-            (
-                PathBuf::from("path/to/source_name"),
-                TestFile::file("source_name".into()),
-            ),
-            (
-                PathBuf::from("path/to/target_name"),
-                TestFile::file("target_name".into()),
-            ),
-            (
-                PathBuf::from("path/to/original_name"),
-                TestFile::file("original_name".into()),
-            ),
-            (PathBuf::from("path/to/ignore_a"), TestFile::file("ignore_a".into())),
-            (PathBuf::from("path/to/ignore_b"), TestFile::file("ignore_b".into())),
-        ]
-        .into_iter()
-        .collect(),
-        links: [].into_iter().collect(),
-        tree: [
-            (PathBuf::from("path/to/dir-x"), [].into_iter().collect()),
-            (PathBuf::from("path/to/dir-y"), [].into_iter().collect()),
-        ]
-        .into_iter()
-        .collect(),
+    static TEST_TREE: LazyLock<TestFs> = LazyLock::new(|| {
+        TestFs::new([
+            (PathBuf::from("path/to/in_home"), TestFile::Regular),
+            (PathBuf::from("path/to/source_name"), TestFile::Regular),
+            (PathBuf::from("path/to/target_name"), TestFile::Regular),
+            (PathBuf::from("path/to/original_name"), TestFile::Regular),
+            (PathBuf::from("path/to/ignore_a"), TestFile::Regular),
+            (PathBuf::from("path/to/ignore_b"), TestFile::Regular),
+            (PathBuf::from("path/to/dir-x"), TestFile::Directory),
+            (PathBuf::from("path/to/dir-y"), TestFile::Directory),
+        ])
     });
 
     #[test]

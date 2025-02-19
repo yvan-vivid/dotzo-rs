@@ -1,25 +1,21 @@
+mod action;
 mod app;
 mod components;
 mod config;
 mod mapping;
 mod tasks;
 mod util;
+mod validation;
 
 use anyhow::Result;
-use components::{
-    dotzo::types::Dotzo,
-    environment::inference::{DirsEnvironmentInference, EnvironmentInference},
-    repo::types::Repo,
-    validation::directory::{DirectoryCheck, DirectoryCheckError},
-};
+use components::{dotzo::types::DotzoApp, environment::inference::DirsEnvironmentInference};
 
-use app::{
-    cli::{parse_cli, Command},
-    logging::setup_logging,
+use app::{cli::parse_cli, logging::setup_logging};
+use util::{
+    actions::{DryFsActions, StandardFsActions},
+    fs::StandardFsRead,
+    prompting::InquirePrompter,
 };
-use log::{error, info};
-use tasks::{info::info_task, sync::sync_task};
-use util::{actions::DryFsActions, fs::StandardFsRead};
 
 fn main() -> Result<()> {
     let cli = parse_cli();
@@ -27,28 +23,36 @@ fn main() -> Result<()> {
 
     // Injectable
     let standard_fs_read = StandardFsRead::new();
-    let standard_actions = DryFsActions::new(&standard_fs_read);
+    let prompter = InquirePrompter::new();
     let env_inference = DirsEnvironmentInference::new();
-    let directory_check = DirectoryCheck::new(&standard_fs_read);
 
-    // Getting home
-    info!("Identifying home directory");
-    let home = env_inference.create_home(cli.home_dir)?;
+    if cli.dry_run {
+        let standard_actions = DryFsActions::new(&standard_fs_read);
+        let init = DotzoApp::new(
+            &standard_fs_read,
+            &standard_fs_read,
+            &standard_fs_read,
+            &standard_actions,
+            &prompter,
+            &env_inference,
+        );
 
-    info!("Validating home directory");
-    if let Err(e) = directory_check.check(&home) {
-        error!("{} for home {}", e, home.as_ref().display());
-        return Ok(());
-    }
+        let dotzo = init.init(&cli)?;
+        init.run(&cli, dotzo)?;
+        Ok(())
+    } else {
+        let standard_actions = StandardFsActions::new();
+        let init = DotzoApp::new(
+            &standard_fs_read,
+            &standard_fs_read,
+            &standard_fs_read,
+            &standard_actions,
+            &prompter,
+            &env_inference,
+        );
 
-    let rc = env_inference.load_rc(&home)?;
-    let environment = env_inference.create(home, &rc, cli.config_dir)?;
-    let repo = Repo::from_config(&environment, &rc, cli.config);
-
-    match cli.command {
-        Command::Init => Ok(()),
-        Command::Setup => unimplemented!(),
-        Command::Sync => sync_task(Dotzo::new(environment, repo), &standard_fs_read, &standard_actions),
-        Command::Info => info_task(environment, &standard_fs_read),
+        let dotzo = init.init(&cli)?;
+        init.run(&cli, dotzo)?;
+        Ok(())
     }
 }
