@@ -3,12 +3,15 @@ use log::{debug, info};
 use std::path::PathBuf;
 use thiserror::Error;
 
-use crate::config::{
-    file::{ConfigFileReadError, ReadFromConfig},
-    rc::types::Rc,
+use crate::{
+    config::{
+        file::{ConfigFileReadError, ReadFromConfig},
+        rc::types::Rc,
+    },
+    util::dir::Labeled,
 };
 
-use super::types::{Configs, Environment, Home};
+use super::types::{CacheDir, ConfigDir, CoreDir, DataDir, Environment, Home, StateDir};
 
 #[derive(Debug, Error)]
 pub enum EnvironmentInferenceError {
@@ -24,54 +27,104 @@ pub enum EnvironmentInferenceError {
 
 pub type Result<T> = core::result::Result<T, EnvironmentInferenceError>;
 
-pub trait EnvironmentInference {
-    fn home(&self) -> Option<PathBuf>;
-    fn config(&self) -> Option<PathBuf>;
+pub trait DirInference<D: From<PathBuf> + Labeled> {
+    fn infer(&self) -> Option<PathBuf>;
 
-    fn create_home(&self, given: Option<PathBuf>) -> Result<Home> {
+    fn inference(&self, given: Option<PathBuf>) -> Option<D> {
         given
-            .inspect(|p| info!("Explicitly setting home with given: {}", p.display()))
-            .or_else(|| {
-                info!("Inferring home");
-                self.home()
+            .inspect(|p| {
+                info!(
+                    "Explicitly setting the {} directory with given: {}",
+                    D::LABEL,
+                    p.display()
+                )
             })
-            .ok_or(EnvironmentInferenceError::CannotInferHome)
-            .map(Home::new)
+            .or_else(|| {
+                self.infer()
+                    .inspect(|p| info!("Inferring the {} directory as: {}", D::LABEL, p.display()))
+            })
+            .map(From::from)
     }
+}
 
-    fn create_config(&self, home: &Home, given: Option<PathBuf>) -> Configs {
-        Configs::new(
-            given
-                .inspect(|p| info!("Explicitly setting config directory with given: {}", p.display()))
-                .or_else(|| {
-                    info!("Inferring config directory");
-                    self.config()
-                })
-                .unwrap_or_else(|| home.as_ref().join(".config")),
-        )
+pub trait CoreInference<D: CoreDir>: DirInference<D> {
+    fn inference_or_default(&self, home: &Home, given: Option<PathBuf>) -> D {
+        self.inference(given).unwrap_or_else(|| {
+            let de = D::from_home(home);
+            info!("Using the default for the {} directory: {}", D::LABEL, de.display());
+            de.into()
+        })
     }
+}
 
+impl<D: CoreDir, T: DirInference<D>> CoreInference<D> for T {}
+
+pub trait EnvironmentInference:
+    DirInference<Home>
+    + CoreInference<ConfigDir>
+    + CoreInference<DataDir>
+    + CoreInference<StateDir>
+    + CoreInference<CacheDir>
+{
     fn load_rc(&self, home: &Home) -> Result<Rc> {
         debug!("Looking for a config in home: {}", home.as_ref().display());
         Rc::find_in_path(home)?.ok_or(EnvironmentInferenceError::RcNotFound)
     }
 
-    fn create(&self, home: Home, _rc: &Rc, given_config: Option<PathBuf>) -> Result<Environment> {
-        let config = self.create_config(&home, given_config);
-        Ok(Environment::new(home, config))
+    fn create_home(&self, given_home: Option<PathBuf>) -> Result<Home> {
+        self.inference(given_home)
+            .ok_or(EnvironmentInferenceError::CannotInferHome)
     }
+
+    fn create(&self, home: Home, _rc: &Rc, given_config: Option<PathBuf>) -> Result<Environment> {
+        let config = self.inference_or_default(&home, given_config);
+        let data = self.inference_or_default(&home, None);
+        let state = self.inference_or_default(&home, None);
+        let cache = self.inference_or_default(&home, None);
+        Ok(Environment::new(home, config, data, state, cache))
+    }
+}
+
+impl<
+        E: DirInference<Home>
+            + CoreInference<ConfigDir>
+            + CoreInference<DataDir>
+            + CoreInference<StateDir>
+            + CoreInference<CacheDir>,
+    > EnvironmentInference for E
+{
 }
 
 #[derive(Debug, Constructor)]
 pub struct DirsEnvironmentInference {}
 
-impl EnvironmentInference for DirsEnvironmentInference {
-    fn home(&self) -> Option<PathBuf> {
+impl DirInference<Home> for DirsEnvironmentInference {
+    fn infer(&self) -> Option<PathBuf> {
         dirs::home_dir()
     }
+}
 
-    fn config(&self) -> Option<PathBuf> {
+impl DirInference<ConfigDir> for DirsEnvironmentInference {
+    fn infer(&self) -> Option<PathBuf> {
         dirs::config_local_dir()
+    }
+}
+
+impl DirInference<DataDir> for DirsEnvironmentInference {
+    fn infer(&self) -> Option<PathBuf> {
+        dirs::data_local_dir()
+    }
+}
+
+impl DirInference<StateDir> for DirsEnvironmentInference {
+    fn infer(&self) -> Option<PathBuf> {
+        dirs::state_dir()
+    }
+}
+
+impl DirInference<CacheDir> for DirsEnvironmentInference {
+    fn infer(&self) -> Option<PathBuf> {
+        dirs::cache_dir()
     }
 }
 
@@ -82,18 +135,41 @@ pub mod testing {
     use super::*;
 
     #[derive(Debug, Constructor)]
-    pub struct TestEnvironmentInterface {
+    pub struct TestEnvironmentInference {
         pub test_home: Option<PathBuf>,
         pub test_config: Option<PathBuf>,
+        pub test_data: Option<PathBuf>,
+        pub test_state: Option<PathBuf>,
+        pub test_cache: Option<PathBuf>,
     }
 
-    impl EnvironmentInference for TestEnvironmentInterface {
-        fn home(&self) -> Option<PathBuf> {
-            self.test_home.to_owned()
+    impl DirInference<Home> for TestEnvironmentInference {
+        fn infer(&self) -> Option<PathBuf> {
+            self.test_home.clone()
         }
+    }
 
-        fn config(&self) -> Option<PathBuf> {
-            self.test_config.to_owned()
+    impl DirInference<ConfigDir> for TestEnvironmentInference {
+        fn infer(&self) -> Option<PathBuf> {
+            self.test_config.clone()
+        }
+    }
+
+    impl DirInference<DataDir> for TestEnvironmentInference {
+        fn infer(&self) -> Option<PathBuf> {
+            self.test_data.clone()
+        }
+    }
+
+    impl DirInference<StateDir> for TestEnvironmentInference {
+        fn infer(&self) -> Option<PathBuf> {
+            self.test_state.clone()
+        }
+    }
+
+    impl DirInference<CacheDir> for TestEnvironmentInference {
+        fn infer(&self) -> Option<PathBuf> {
+            self.test_cache.clone()
         }
     }
 }
@@ -105,15 +181,21 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::LazyLock;
 
-    static TEST_INFERENCE: LazyLock<TestEnvironmentInterface> = LazyLock::new(|| {
-        TestEnvironmentInterface::new(Some(PathBuf::from("/test/home")), Some(PathBuf::from("/test/config")))
+    static TEST_INFERENCE: LazyLock<TestEnvironmentInference> = LazyLock::new(|| {
+        TestEnvironmentInference::new(
+            Some(PathBuf::from("/test/home")),
+            Some(PathBuf::from("/test/config")),
+            Some(PathBuf::from("/test/local/share")),
+            Some(PathBuf::from("/test/local/state")),
+            Some(PathBuf::from("/test/cache")),
+        )
     });
 
-    static TEST_INFERENCE_NO_HOME: LazyLock<TestEnvironmentInterface> =
-        LazyLock::new(|| TestEnvironmentInterface::new(None, Some(PathBuf::from("/test/config"))));
+    static TEST_INFERENCE_NO_HOME: LazyLock<TestEnvironmentInference> =
+        LazyLock::new(|| TestEnvironmentInference::new(None, Some(PathBuf::from("/test/config")), None, None, None));
 
-    static TEST_INFERENCE_NO_CONFIG: LazyLock<TestEnvironmentInterface> =
-        LazyLock::new(|| TestEnvironmentInterface::new(Some(PathBuf::from("/test/home")), None));
+    static TEST_INFERENCE_NO_CONFIG: LazyLock<TestEnvironmentInference> =
+        LazyLock::new(|| TestEnvironmentInference::new(Some(PathBuf::from("/test/home")), None, None, None, None));
 
     static TEST_RC: LazyLock<Rc> = LazyLock::new(Rc::default);
 
@@ -142,21 +224,21 @@ mod tests {
     fn test_create_config_with_given_path() {
         let home = TEST_INFERENCE.create_home(None).unwrap();
         let given_config = Some(PathBuf::from("/custom/config"));
-        let config = TEST_INFERENCE.create_config(&home, given_config);
+        let config: ConfigDir = TEST_INFERENCE.inference_or_default(&home, given_config);
         assert_eq!(config.as_ref(), Path::new("/custom/config"));
     }
 
     #[test]
     fn test_create_config_with_inferred_path() {
         let home = TEST_INFERENCE.create_home(None).unwrap();
-        let config = TEST_INFERENCE.create_config(&home, None);
+        let config: ConfigDir = TEST_INFERENCE.inference_or_default(&home, None);
         assert_eq!(config.as_ref(), Path::new("/test/config"));
     }
 
     #[test]
     fn test_create_config_defaults_to_home_dot_config() {
         let home = TEST_INFERENCE_NO_CONFIG.create_home(None).unwrap();
-        let config = TEST_INFERENCE_NO_CONFIG.create_config(&home, None);
+        let config: ConfigDir = TEST_INFERENCE_NO_CONFIG.inference_or_default(&home, None);
         assert_eq!(config.as_ref(), Path::new("/test/home/.config"));
     }
 

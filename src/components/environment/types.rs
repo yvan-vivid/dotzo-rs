@@ -1,13 +1,34 @@
-use derive_more::derive::{Constructor, From};
+use derive_more::derive::{AsRef, Constructor, From};
+use relative_path::RelativePathBuf;
 use std::path::{Path, PathBuf};
 
-use crate::mapping::Destination;
+use crate::{dir, label, labeled_dir, mapping::Destination, util::dir::Labeled};
 
-#[derive(Debug, Constructor, PartialEq, From, Eq)]
-pub struct Home(PathBuf);
+labeled_dir!(Home, "home");
 
-#[derive(Debug, Constructor, PartialEq, From, Eq)]
-pub struct Configs(PathBuf);
+pub trait CoreDir: Labeled + From<PathBuf> {
+    fn relative_to_home() -> RelativePathBuf;
+
+    fn from_home(home: &Home) -> PathBuf {
+        Self::relative_to_home().to_path(home)
+    }
+}
+
+macro_rules! core_dir {
+    ($x:ident, $p:literal, $d:literal) => {
+        labeled_dir!($x, $p);
+        impl CoreDir for $x {
+            fn relative_to_home() -> RelativePathBuf {
+                RelativePathBuf::from($p)
+            }
+        }
+    };
+}
+
+core_dir!(ConfigDir, "config", ".config");
+core_dir!(DataDir, "data", ".local/share");
+core_dir!(StateDir, "state", ".local/state");
+core_dir!(CacheDir, "cache", ".cache");
 
 #[derive(Debug, Constructor)]
 pub struct DestinationData<'a> {
@@ -18,19 +39,10 @@ pub struct DestinationData<'a> {
 #[derive(Debug, Constructor, PartialEq, Eq)]
 pub struct Environment {
     pub home: Home,
-    pub config: Configs,
-}
-
-impl AsRef<Path> for Home {
-    fn as_ref(&self) -> &Path {
-        self.0.as_path()
-    }
-}
-
-impl AsRef<Path> for Configs {
-    fn as_ref(&self) -> &Path {
-        self.0.as_path()
-    }
+    pub config: ConfigDir,
+    pub data: DataDir,
+    pub state: StateDir,
+    pub cache: CacheDir,
 }
 
 impl Environment {
