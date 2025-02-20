@@ -5,7 +5,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum PrompterError {
     #[error("IO error")]
-    General(Box<dyn core::error::Error>),
+    General(Box<dyn core::error::Error + Send + Sync>),
 }
 
 pub type Result<T> = core::result::Result<T, PrompterError>;

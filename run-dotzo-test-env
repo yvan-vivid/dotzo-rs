@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+declare -r dot_env="$test_home/.env"
+
+docker run -it --rm \
+  -e "TERM=xterm-256color" \
+  -e "ENV=$dot_env" -e "BASH_ENV=$dot_env" \
+  --name dotzo_test \
+  dotzo-test

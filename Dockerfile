@@ -16,9 +16,8 @@ RUN adduser -D -s /bin/bash $test_user \
   && chmod 0440 /etc/sudoers.d/$test_user
 
 USER tester
-ARG dotzo_dev=/home/tester/dotzo-dev
-ENV PATH="$dotzo_dev:${PATH}"
 WORKDIR /home/tester
 
 COPY ./target/x86_64-unknown-linux-musl/release/dotzo /usr/bin/dotzo
 COPY ./test/_ /home/tester/_
+COPY ./test/.dotrc /home/tester/.dotrc

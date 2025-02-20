@@ -1,29 +1,41 @@
-use anyhow::Result;
-use log::info;
+use log::{error, info};
+use thiserror::Error;
 
 use crate::{
+    app::{cli::Cli, dotzo::App},
     components::{
         dotzo::types::Dotzo,
+        environment::checks::EnvironmentCheckerError,
         linker::{DotLinker, DotReconciliation},
         repo::tree::TreeTraverser,
     },
-    util::{
-        actions::Actions,
-        fs::{DirectoryListing, LinkReader, MetadataChecks},
-    },
+    util::prompting::{Prompter, PrompterError},
 };
-use inquire::Confirm;
 
-pub fn sync_task<MC: MetadataChecks, LR: LinkReader, DL: DirectoryListing, A: Actions>(
-    dotzo: Dotzo,
-    mc: &MC,
-    lr: &LR,
-    dl: &DL,
-    actions: &A,
-) -> Result<()> {
+#[derive(Debug, Error)]
+pub enum SyncTaskError {
+    // TODO: Get rid of anyhow in components
+    #[error("Anyhow passthrough")]
+    Anywho(#[from] anyhow::Error),
+
+    #[error("Prompt error")]
+    Prompt(#[from] PrompterError),
+
+    #[error("Environment checks")]
+    Environment(#[from] EnvironmentCheckerError),
+}
+
+pub type Result<T> = core::result::Result<T, SyncTaskError>;
+
+pub fn sync_task<'a, APP: App<'a>>(app: &'a APP, _cli: &Cli, dotzo: Dotzo) -> Result<()> {
     // Components
-    let linker = DotLinker::new(mc, lr, actions);
-    let traverser = TreeTraverser::new(dl, mc);
+    let linker = DotLinker::new(app.metadata_checks(), app.link_reader(), app.actions());
+    let traverser = TreeTraverser::new(app.directory_listing(), app.metadata_checks());
+    let prompting = app.prompter();
+    let checks = app.environment_checker(false, true);
+
+    // Checks
+    checks.check_tree(&dotzo.environment)?;
 
     // Get Mappings
     info!("Getting mappings from the repository.");
@@ -51,10 +63,8 @@ pub fn sync_task<MC: MetadataChecks, LR: LinkReader, DL: DirectoryListing, A: Ac
 
     if !pending.is_empty() {
         info!("Can create {} of {} new links.", pending.len(), link_count);
-        let do_create_links = Confirm::new(&format!("Create {} new links?", pending.len()))
-            .with_default(false)
-            .with_help_message("This will create new dotfile links in home, .config, and other specified locations.")
-            .prompt()?;
+        let do_create_links = prompting.confirm(&format!("Create {} new links?", pending.len()), false)?;
+        // .with_help_message("This will create new dotfile links in home, .config, and other specified locations.")
 
         if do_create_links {
             info!("Confirmed: creating links");

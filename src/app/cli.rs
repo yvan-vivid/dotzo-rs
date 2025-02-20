@@ -37,7 +37,9 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    // Init,
+    /// Just initialize the app and show environment issues
+    Init,
+
     // Setup,
     /// Sync dotfiles from repo to home environment
     Sync,
