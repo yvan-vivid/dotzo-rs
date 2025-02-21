@@ -4,7 +4,10 @@ use thiserror::Error;
 use crate::{
     action::directory_creator::DirectoryCreator,
     app::cli::{Cli, Command},
-    components::environment::{checks::EnvironmentChecker, inference::EnvironmentInference},
+    components::environment::{
+        checks::{home::HomeCheck, structure::StructureCheck, tree::LayoutCheck},
+        inference::EnvironmentInference,
+    },
     tasks::{
         info::{info_task, InfoTaskError},
         init::{init_task, InitTaskError},
@@ -47,21 +50,18 @@ pub trait App<'a> {
     fn prompter(&self) -> &'a Self::PR;
     fn inference(&self) -> &'a Self::EI;
 
-    fn environment_checker(
-        &self,
-        yes: bool,
-        create_directories: bool,
-    ) -> EnvironmentChecker<'a, Self::MC, Self::LR, Self::A, Self::PR> {
+    fn layout_check(&self, yes: bool, create_directories: bool) -> LayoutCheck<'a, Self::MC, Self::A, Self::PR> {
         let directory_checker = DirectoryCheck::new(self.metadata_checks());
-        let containment = ContainmentCheck::new(self.metadata_checks(), self.link_reader());
         let directory_creator = DirectoryCreator::new(self.actions(), self.prompter());
-        EnvironmentChecker::new(
-            directory_checker,
-            containment,
-            directory_creator,
-            yes,
-            create_directories,
-        )
+        LayoutCheck::new(directory_checker, directory_creator, yes, create_directories)
+    }
+
+    fn structure_check(&self) -> StructureCheck<'a, Self::MC, Self::LR> {
+        StructureCheck::new(ContainmentCheck::new(self.metadata_checks(), self.link_reader()))
+    }
+
+    fn home_check(&self) -> HomeCheck<'a, Self::MC> {
+        HomeCheck::new(DirectoryCheck::new(self.metadata_checks()))
     }
 }
 
