@@ -2,7 +2,7 @@ use log::{error, info};
 use thiserror::Error;
 
 use crate::{
-    app::{cli::Cli, dotzo::App},
+    app::{cli::Cli, types::App},
     components::{
         dotzo::types::Dotzo,
         environment::{

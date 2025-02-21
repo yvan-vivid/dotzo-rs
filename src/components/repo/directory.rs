@@ -71,7 +71,7 @@ impl<'a, 'b: 'a, ID: DirEntryIterator, MC: MetadataChecks> DirVisitor<'a, 'b, ID
         context: &'a SpecContext,
         directory_check: &'b MC,
         directory_listing: &DL,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self> {
         Ok(DirVisitor::new(
             directory_listing.read_dir(path)?,
             context,

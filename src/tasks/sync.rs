@@ -2,34 +2,47 @@ use log::{error, info};
 use thiserror::Error;
 
 use crate::{
-    app::{cli::Cli, dotzo::App},
+    action::make_link::{LinkCreator, LinkCreatorError},
+    app::{cli::Cli, types::App},
     components::{
         dotzo::types::Dotzo,
         environment::checks::structure::StructureCheckError,
-        linker::{DotLinker, DotReconciliation},
-        repo::tree::TreeTraverser,
+        linker::{
+            link::{DotLinker, DotLinkerError},
+            reconciliation::{DotReconciliation, DotReconciliationError},
+        },
+        repo::tree::{TreeTraverser, TreeTraverserError},
     },
     util::prompting::{Prompter, PrompterError},
 };
 
 #[derive(Debug, Error)]
 pub enum SyncTaskError {
-    // TODO: Get rid of anyhow in components
-    #[error("Anyhow passthrough")]
-    Anywho(#[from] anyhow::Error),
-
     #[error("Prompt error")]
     Prompt(#[from] PrompterError),
 
     #[error("Structure check failure: {0}")]
     Structure(#[from] StructureCheckError),
+
+    #[error("Reconciliation error: {0}")]
+    Reconciliation(#[from] DotReconciliationError),
+
+    #[error("Reconciliation error: {0}")]
+    Link(#[from] DotLinkerError),
+
+    #[error("Link creation error: {0}")]
+    LinkCreation(#[from] LinkCreatorError),
+
+    #[error("Error traversing repo: {0}")]
+    Traversal(#[from] TreeTraverserError),
 }
 
 pub type Result<T> = core::result::Result<T, SyncTaskError>;
 
 pub fn sync_task<'a, APP: App<'a>>(app: &'a APP, _cli: &Cli, dotzo: Dotzo) -> Result<()> {
     // Components
-    let linker = DotLinker::new(app.metadata_checks(), app.link_reader(), app.actions());
+    let linker = DotLinker::new(app.metadata_checks(), app.link_reader());
+    let link_creator = LinkCreator::new(app.metadata_checks(), app.link_reader(), app.actions());
     let traverser = TreeTraverser::new(app.directory_listing(), app.metadata_checks());
     let prompting = app.prompter();
     let checks = app.structure_check();
@@ -48,7 +61,7 @@ pub fn sync_task<'a, APP: App<'a>>(app: &'a APP, _cli: &Cli, dotzo: Dotzo) -> Re
     // Reconciliation
     info!("Doing mapping reconciliation.");
     let DotReconciliation { confirmed, pending, .. } =
-        linker.reconciliation(&dotzo.environment, dot_maps.into_values())?;
+        DotReconciliation::with_linker(&linker, &dotzo.environment, dot_maps.into_values())?;
 
     if confirmed.len() == link_count {
         info!(
@@ -71,7 +84,7 @@ pub fn sync_task<'a, APP: App<'a>>(app: &'a APP, _cli: &Cli, dotzo: Dotzo) -> Re
         if do_create_links {
             info!("Confirmed: creating links");
             for dot_link in pending {
-                linker.link(&dot_link)?
+                link_creator.create(&dot_link)?
             }
         } else {
             info!("Will not create links")

@@ -7,7 +7,7 @@ use crate::util::fs::{LinkReader, MetadataChecks};
 
 #[derive(Debug, Error)]
 pub enum ContainmentError {
-    #[error("Io error")]
+    #[error("Io error: {0}")]
     Io(#[from] std::io::Error),
 
     #[error("The conainer is not a directory")]

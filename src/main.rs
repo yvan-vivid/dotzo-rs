@@ -11,6 +11,7 @@ use anyhow::Result;
 use components::environment::inference::DirsEnvironmentInference;
 
 use app::{cli::parse_cli, dotzo::DotzoApp, logging::setup_logging};
+use tasks::run::run;
 use util::{
     actions::{DryFsActions, StandardFsActions},
     fs::StandardFsRead,
@@ -28,10 +29,12 @@ fn main() -> Result<()> {
 
     if cli.dry_run {
         let actions = DryFsActions::new(&fs_read);
-        DotzoApp::new_with_fs(&fs_read, &actions, &prompter, &env_inference).run(&cli)?;
+        let app = DotzoApp::new_with_fs(&fs_read, &actions, &prompter, &env_inference);
+        run(&app, &cli)?;
     } else {
         let actions = StandardFsActions::new();
-        DotzoApp::new_with_fs(&fs_read, &actions, &prompter, &env_inference).run(&cli)?;
+        let app = DotzoApp::new_with_fs(&fs_read, &actions, &prompter, &env_inference);
+        run(&app, &cli)?;
     }
     Ok(())
 }

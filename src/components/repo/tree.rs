@@ -1,16 +1,18 @@
-use anyhow::{anyhow, Result};
 use log::{debug, warn};
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
 };
+use thiserror::Error;
 
 use crate::{
     components::repo::directory::{DirVisitor, IgnoreType, RepoDirItem, RepoDirItemWithPath},
-    config::spec::translate::SpecContext,
+    config::{file::ConfigFileReadError, spec::translate::SpecContext},
     mapping::{DotMap, DotMaps},
     util::fs::{DirectoryListing, MetadataChecks},
 };
+
+use super::directory::RepoDirVisitorError;
 
 fn hash_set_to_string(hs: &HashSet<String>) -> String {
     hs.iter().map(|s| format!("[{}]", s)).collect::<Vec<_>>().join(", ")
@@ -49,6 +51,20 @@ impl DirData {
         }
     }
 }
+
+#[derive(Debug, Error)]
+pub enum TreeTraverserError {
+    #[error("Io error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("Error reading config file: {0}")]
+    ConfigFile(#[from] ConfigFileReadError),
+
+    #[error("Error visiting directory: {0}")]
+    DirVisitor(#[from] RepoDirVisitorError),
+}
+
+pub type Result<T> = core::result::Result<T, TreeTraverserError>;
 
 #[derive(Debug)]
 pub struct TreeTraverser<'a, DL: DirectoryListing, MC: MetadataChecks> {
@@ -93,7 +109,12 @@ impl<'b, 'a: 'b, DL: DirectoryListing, MC: MetadataChecks> TreeTraverser<'a, DL,
         path: P,
         context: &'b SpecContext,
     ) -> Result<DirVisitor<'b, 'a, DL::Iter, MC>> {
-        DirVisitor::from_path(path, context, self.metadata_checks, self.directory_listing)
+        Ok(DirVisitor::from_path(
+            path,
+            context,
+            self.metadata_checks,
+            self.directory_listing,
+        )?)
     }
 
     pub fn traverse<P: AsRef<Path>>(&self, root: P) -> Result<DotMaps> {
@@ -110,9 +131,7 @@ impl<'b, 'a: 'b, DL: DirectoryListing, MC: MetadataChecks> TreeTraverser<'a, DL,
             }) {
                 match entry {
                     Ok(path) => stack.push(path),
-
-                    // TODO: Fix error
-                    Err(_) => return Err(anyhow!("Error")),
+                    Err(e) => return Err(e.into()),
                 }
             }
             dir_data.report();
