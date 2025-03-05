@@ -1,4 +1,4 @@
-max_width = 120
+max_width = 100
 edition = "2021"
 
 # fn_single_line = true
