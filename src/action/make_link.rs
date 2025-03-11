@@ -7,7 +7,7 @@ use thiserror::Error;
 use crate::{
     components::linker::types::DotLink,
     util::{
-        actions::{ActionError, Actions},
+        actions::{Actions, Error as ActionError},
         fs::{LinkReader, MetadataChecks},
     },
 };

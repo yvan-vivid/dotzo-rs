@@ -2,7 +2,7 @@ use derive_more::derive::Constructor;
 use thiserror::Error;
 
 use crate::util::{
-    actions::{ActionError, Actions},
+    actions::{Actions, Error as ActionError},
     dir::LabeledDir,
     prompting::{Prompter, PrompterError},
 };
