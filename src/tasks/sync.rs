@@ -11,7 +11,10 @@ use crate::{
             link::{DotLinker, DotLinkerError},
             reconciliation::{DotReconciliation, DotReconciliationError},
         },
-        repo::tree::{TreeTraverser, TreeTraverserError},
+        repo::{
+            checks::structure::StructureCheckError as RepoStructureCheckError,
+            tree::{TreeTraverser, TreeTraverserError},
+        },
     },
     util::prompting::{Prompter, PrompterError},
 };
@@ -23,6 +26,9 @@ pub enum SyncTaskError {
 
     #[error("Structure check failure: {0}")]
     Structure(#[from] StructureCheckError),
+
+    #[error("Structure check failure: {0}")]
+    RepoStructure(#[from] RepoStructureCheckError),
 
     #[error("Reconciliation error: {0}")]
     Reconciliation(#[from] DotReconciliationError),
@@ -46,11 +52,16 @@ pub fn sync_task<'a, APP: App<'a>>(app: &'a APP, _cli: &Cli, dotzo: Dotzo) -> Re
     let traverser = TreeTraverser::new(app.directory_listing(), app.metadata_checks());
     let prompting = app.prompter();
     let checks = app.structure_check();
+    let repo_checks = app.repo_structure_check();
 
     // Checks
     info!("Checking the environment structure");
     checks.check(&dotzo.environment)?;
     info!("Environment structure checked");
+
+    info!("Checking the repository");
+    repo_checks.check(&dotzo.repo)?;
+    info!("Repository validated");
 
     // Get Mappings
     info!("Getting mappings from the repository.");
@@ -60,8 +71,9 @@ pub fn sync_task<'a, APP: App<'a>>(app: &'a APP, _cli: &Cli, dotzo: Dotzo) -> Re
 
     // Reconciliation
     info!("Doing mapping reconciliation.");
-    let DotReconciliation { confirmed, pending, .. } =
-        DotReconciliation::with_linker(&linker, &dotzo.environment, dot_maps.into_values())?;
+    let DotReconciliation {
+        confirmed, pending, ..
+    } = DotReconciliation::with_linker(&linker, &dotzo.environment, dot_maps.into_values())?;
 
     if confirmed.len() == link_count {
         info!(
@@ -78,13 +90,14 @@ pub fn sync_task<'a, APP: App<'a>>(app: &'a APP, _cli: &Cli, dotzo: Dotzo) -> Re
 
     if !pending.is_empty() {
         info!("Can create {} of {} new links.", pending.len(), link_count);
-        let do_create_links = prompting.confirm(format!("Create {} new links?", pending.len()), false)?;
+        let do_create_links =
+            prompting.confirm(format!("Create {} new links?", pending.len()), false)?;
         // .with_help_message("This will create new dotfile links in home, .config, and other specified locations.")
 
         if do_create_links {
             info!("Confirmed: creating links");
             for dot_link in pending {
-                link_creator.create(&dot_link)?
+                link_creator.create(&dot_link)?;
             }
         } else {
             info!("Will not create links")

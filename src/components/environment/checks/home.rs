@@ -12,7 +12,10 @@ use crate::{
 #[derive(Debug, Error)]
 pub enum HomeCheckError {
     #[error("Home check failed at {path} with {error:?}")]
-    Check { path: PathBuf, error: DirectoryCheckError },
+    Check {
+        path: PathBuf,
+        error: DirectoryCheckError,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, HomeCheckError>;
@@ -25,7 +28,7 @@ pub struct HomeCheck<'a, MC: MetadataChecks> {
 impl<MC: MetadataChecks> HomeCheck<'_, MC> {
     pub fn check(&self, home: &Home) -> Result<()> {
         self.directory_check
-            .check(&home)
+            .check(home)
             .map_err(|error| HomeCheckError::Check {
                 path: home.as_ref().to_owned(),
                 error,

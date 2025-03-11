@@ -15,34 +15,28 @@ pub enum ActionError {
 pub type Result<T> = core::result::Result<T, ActionError>;
 
 pub trait Actions {
-    fn make_dir<P: AsRef<Path>>(&self, path: P) -> Result<()>;
-    fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(&self, target: P, path: Q) -> Result<()>;
-
-    fn try_symlink<P: AsRef<Path>, Q: AsRef<Path>>(&self, target: P, path: Q) -> Result<bool> {
-        match self.symlink(target, path) {
-            Ok(_) => Ok(true),
-            Err(e) => match e {
-                ActionError::Io(ioe) => match ioe.kind() {
-                    ErrorKind::AlreadyExists => Ok(false),
-                    _ => Err(ioe.into()),
-                },
-            },
-        }
-    }
+    fn make_dir(&self, path: impl AsRef<Path>) -> Result<()>;
+    fn symlink(&self, target: impl AsRef<Path>, path: impl AsRef<Path>) -> Result<()>;
 }
 
 #[derive(Debug, Constructor)]
 pub struct StandardFsActions {}
 
+impl ActionError {
+    pub fn from_io_kind(kind: ErrorKind) -> Self {
+        std::io::Error::from(kind).into()
+    }
+}
+
 impl Actions for StandardFsActions {
-    fn make_dir<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+    fn make_dir(&self, path: impl AsRef<Path>) -> Result<()> {
         let path = path.as_ref();
         info!("Creating directory: {}", path.display());
         create_dir_all(path)?;
         Ok(())
     }
 
-    fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(&self, target: P, path: Q) -> Result<()> {
+    fn symlink(&self, target: impl AsRef<Path>, path: impl AsRef<Path>) -> Result<()> {
         info!(
             "Creating symlink from {} to {}",
             target.as_ref().display(),
@@ -58,15 +52,18 @@ pub struct DryFsActions<'a, MC: MetadataChecks> {
 }
 
 impl<MC: MetadataChecks> Actions for DryFsActions<'_, MC> {
-    fn make_dir<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+    fn make_dir(&self, path: impl AsRef<Path>) -> Result<()> {
         let path = path.as_ref();
         info!("DRY-RUN: Would have created directory: {}", path.display());
         Ok(())
     }
 
-    fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(&self, target: P, path: Q) -> Result<()> {
+    fn symlink(&self, target: impl AsRef<Path>, path: impl AsRef<Path>) -> Result<()> {
         if self.metadata_checks.exists(&target) {
-            Err(std::io::Error::new(ErrorKind::AlreadyExists, "Target already exists"))?
+            Err(std::io::Error::new(
+                ErrorKind::AlreadyExists,
+                "Target already exists",
+            ))?
         } else {
             info!(
                 "DRY-RUN: Would have creating symlink from {} to {}",
@@ -74,6 +71,40 @@ impl<MC: MetadataChecks> Actions for DryFsActions<'_, MC> {
                 path.as_ref().display()
             );
             Ok(())
+        }
+    }
+}
+
+#[cfg(test)]
+mod testing {
+    use std::cell::RefCell;
+
+    use crate::util::fs::testing::{TestFile, TestFs};
+
+    use super::*;
+
+    #[derive(Debug, Constructor)]
+    pub struct TestActions {
+        pub fs: RefCell<TestFs>,
+    }
+
+    impl Actions for TestActions {
+        fn make_dir(&self, path: impl AsRef<Path>) -> Result<()> {
+            self.fs.borrow_mut().add_directory(path);
+            Ok(())
+        }
+
+        fn symlink(&self, target: impl AsRef<Path>, path: impl AsRef<Path>) -> Result<()> {
+            let mut fs = self.fs.borrow_mut();
+            let target = target.as_ref();
+            let path = path.as_ref();
+
+            if fs.exists(target) {
+                Err(std::io::Error::from(ErrorKind::AlreadyExists).into())
+            } else {
+                fs.add_file(target.to_owned(), TestFile::Symlink(path.to_owned()));
+                Ok(())
+            }
         }
     }
 }

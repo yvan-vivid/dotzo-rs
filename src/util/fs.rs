@@ -87,33 +87,43 @@ pub mod testing {
         Symlink(PathBuf),
     }
 
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Debug, PartialEq, Eq, Default)]
     pub struct TestFs {
         pub tree: HashMap<PathBuf, HashSet<PathBuf>>,
         pub files: HashMap<PathBuf, TestFile>,
     }
 
     impl TestFs {
-        pub fn new<I: IntoIterator<Item = (PathBuf, TestFile)>>(it: I) -> Self {
-            let mut tree: HashMap<PathBuf, HashSet<PathBuf>> = HashMap::new();
-            let mut files = HashMap::new();
-            for (path, file) in it {
-                // TODO: Normalize path
-                if let TestFile::Directory = file {
-                    tree.insert(path.clone(), Default::default());
-                }
-
-                let mut member = path.clone();
-                while let Some(directory) = member.parent() {
-                    let d = directory.to_path_buf();
-                    tree.entry(d.clone()).or_default().insert(member.clone());
-                    member = d;
-                }
-
-                files.insert(path, file);
+        fn add_parents(&mut self, path: &Path) {
+            let mut member = path.to_owned();
+            while let Some(directory) = member.parent() {
+                let d = directory.to_path_buf();
+                self.tree
+                    .entry(d.clone())
+                    .or_default()
+                    .insert(member.clone());
+                member = d;
             }
+        }
 
-            Self { tree, files }
+        pub fn add_file(&mut self, path: PathBuf, file: TestFile) {
+            // TODO: Normalize path
+            if let TestFile::Directory = file {
+                self.tree.insert(path.clone(), Default::default());
+            }
+            self.add_parents(&path);
+            self.files.insert(path, file);
+        }
+
+        pub fn add_directory<P: AsRef<Path>>(&mut self, path: P) {
+            self.add_file(path.as_ref().to_owned(), TestFile::Directory);
+        }
+
+        pub fn new<I: IntoIterator<Item = (PathBuf, TestFile)>>(it: I) -> Self {
+            let mut fs = TestFs::default();
+            it.into_iter()
+                .for_each(|(path, file)| fs.add_file(path, file));
+            fs
         }
 
         pub fn get_file(&self, path: &PathBuf) -> std::io::Result<TestFile> {
@@ -150,9 +160,13 @@ pub mod testing {
         }
 
         fn is_file<P: AsRef<Path>>(&self, path: P) -> bool {
-            self.files
-                .get(path.as_ref())
-                .is_some_and(|tf| if let TestFile::Regular = tf { true } else { false })
+            self.files.get(path.as_ref()).is_some_and(|tf| {
+                if let TestFile::Regular = tf {
+                    true
+                } else {
+                    false
+                }
+            })
         }
 
         fn is_symlink<P: AsRef<Path>>(&self, path: P) -> bool {
