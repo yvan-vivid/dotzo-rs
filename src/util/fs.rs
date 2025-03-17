@@ -8,24 +8,24 @@ pub trait DirEntryIterator: Iterator<Item = DirEntryResult> {}
 impl<I: Iterator<Item = DirEntryResult>> DirEntryIterator for I {}
 
 pub trait MetadataChecks {
-    fn is_dir<P: AsRef<Path>>(&self, path: P) -> bool;
-    fn is_file<P: AsRef<Path>>(&self, path: P) -> bool;
-    fn is_symlink<P: AsRef<Path>>(&self, path: P) -> bool;
-    fn exists<P: AsRef<Path>>(&self, path: P) -> bool;
+    fn is_dir(&self, path: impl AsRef<Path>) -> bool;
+    fn is_file(&self, path: impl AsRef<Path>) -> bool;
+    fn is_symlink(&self, path: impl AsRef<Path>) -> bool;
+    fn exists(&self, path: impl AsRef<Path>) -> bool;
 
-    fn is_real_dir<P: AsRef<Path>>(&self, path: P) -> bool {
+    fn is_real_dir(&self, path: impl AsRef<Path>) -> bool {
         self.is_dir(path.as_ref()) && !self.is_symlink(path.as_ref())
     }
 }
 
 pub trait DirectoryListing {
     type Iter: DirEntryIterator;
-    fn read_dir<P: AsRef<Path>>(&self, path: P) -> std::io::Result<Self::Iter>;
+    fn read_dir(&self, path: impl AsRef<Path>) -> std::io::Result<Self::Iter>;
 }
 
 pub trait LinkReader {
-    fn read_link<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf>;
-    fn canonicalize<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf>;
+    fn read_link(&self, path: impl AsRef<Path>) -> std::io::Result<PathBuf>;
+    fn canonicalize(&self, path: impl AsRef<Path>) -> std::io::Result<PathBuf>;
 }
 
 pub trait FsRead: MetadataChecks + DirectoryListing + LinkReader {}
@@ -35,26 +35,26 @@ impl<T: MetadataChecks + DirectoryListing + LinkReader> FsRead for T {}
 pub struct StandardFsRead {}
 
 impl MetadataChecks for StandardFsRead {
-    fn is_dir<P: AsRef<Path>>(&self, path: P) -> bool {
+    fn is_dir(&self, path: impl AsRef<Path>) -> bool {
         path.as_ref().is_dir()
     }
 
-    fn is_file<P: AsRef<Path>>(&self, path: P) -> bool {
+    fn is_file(&self, path: impl AsRef<Path>) -> bool {
         path.as_ref().is_file()
     }
 
-    fn is_symlink<P: AsRef<Path>>(&self, path: P) -> bool {
+    fn is_symlink(&self, path: impl AsRef<Path>) -> bool {
         path.as_ref().is_symlink()
     }
 
-    fn exists<P: AsRef<Path>>(&self, path: P) -> bool {
+    fn exists(&self, path: impl AsRef<Path>) -> bool {
         path.as_ref().exists()
     }
 }
 
 impl DirectoryListing for StandardFsRead {
     type Iter = Box<dyn DirEntryIterator>;
-    fn read_dir<P: AsRef<Path>>(&self, path: P) -> std::io::Result<Self::Iter> {
+    fn read_dir(&self, path: impl AsRef<Path>) -> std::io::Result<Self::Iter> {
         Ok(Box::new(
             path.as_ref()
                 .read_dir()?
@@ -64,11 +64,11 @@ impl DirectoryListing for StandardFsRead {
 }
 
 impl LinkReader for StandardFsRead {
-    fn read_link<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
+    fn read_link(&self, path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
         path.as_ref().read_link()
     }
 
-    fn canonicalize<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
+    fn canonicalize(&self, path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
         path.as_ref().canonicalize()
     }
 }
@@ -127,11 +127,10 @@ pub mod testing {
         }
 
         pub fn get_file(&self, path: &PathBuf) -> std::io::Result<TestFile> {
-            Ok(self
-                .files
+            self.files
                 .get(path)
                 .cloned()
-                .ok_or_else(|| Error::from(ErrorKind::NotFound))?)
+                .ok_or_else(|| Error::from(ErrorKind::NotFound))
         }
 
         pub fn follow_links<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
@@ -155,36 +154,28 @@ pub mod testing {
 
     // TODO: Fix to cover symlink cases
     impl MetadataChecks for TestFs {
-        fn is_dir<P: AsRef<Path>>(&self, path: P) -> bool {
+        fn is_dir(&self, path: impl AsRef<Path>) -> bool {
             self.tree.contains_key(path.as_ref())
         }
 
-        fn is_file<P: AsRef<Path>>(&self, path: P) -> bool {
-            self.files.get(path.as_ref()).is_some_and(|tf| {
-                if let TestFile::Regular = tf {
-                    true
-                } else {
-                    false
-                }
-            })
+        fn is_file(&self, path: impl AsRef<Path>) -> bool {
+            self.files
+                .get(path.as_ref())
+                .is_some_and(|tf| matches!(tf, TestFile::Regular))
         }
 
-        fn is_symlink<P: AsRef<Path>>(&self, path: P) -> bool {
-            if let Some(TestFile::Symlink(_)) = self.files.get(path.as_ref()) {
-                true
-            } else {
-                false
-            }
+        fn is_symlink(&self, path: impl AsRef<Path>) -> bool {
+            matches!(self.files.get(path.as_ref()), Some(TestFile::Symlink(_)))
         }
 
-        fn exists<P: AsRef<Path>>(&self, path: P) -> bool {
+        fn exists(&self, path: impl AsRef<Path>) -> bool {
             self.files.contains_key(path.as_ref())
         }
     }
 
     impl DirectoryListing for TestFs {
         type Iter = Box<dyn DirEntryIterator>;
-        fn read_dir<P: AsRef<Path>>(&self, path: P) -> Result<Self::Iter> {
+        fn read_dir(&self, path: impl AsRef<Path>) -> Result<Self::Iter> {
             let files = self
                 .tree
                 .get(path.as_ref())
@@ -195,11 +186,11 @@ pub mod testing {
     }
 
     impl LinkReader for TestFs {
-        fn read_link<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
+        fn read_link(&self, path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
             self.follow_links(path)
         }
 
-        fn canonicalize<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
+        fn canonicalize(&self, path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
             // TODO: Complete
             Ok(path.as_ref().to_path_buf())
         }

@@ -11,14 +11,14 @@ pub enum PrompterError {
 pub type Result<T> = core::result::Result<T, PrompterError>;
 
 pub trait Prompter {
-    fn confirm<S: AsRef<str>>(&self, message: S, default: bool) -> Result<bool>;
+    fn confirm(&self, message: impl AsRef<str>, default: bool) -> Result<bool>;
 }
 
 #[derive(Debug, Constructor)]
 pub struct InquirePrompter {}
 
 impl Prompter for InquirePrompter {
-    fn confirm<S: AsRef<str>>(&self, message: S, default: bool) -> Result<bool> {
+    fn confirm(&self, message: impl AsRef<str>, default: bool) -> Result<bool> {
         Confirm::new(message.as_ref())
             .with_default(default)
             .prompt()

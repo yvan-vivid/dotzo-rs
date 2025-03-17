@@ -314,6 +314,7 @@ dependencies = [
  "serde_yaml",
  "thiserror",
  "toml",
+ "tryiter",
  "walkdir",
 ]
 
@@ -876,6 +877,12 @@ dependencies = [
  "toml_datetime",
  "winnow",
 ]
+
+[[package]]
+name = "tryiter"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "013cd4defd97c9cca0891b0e3360a304ed6e3bec4b48c00382d552958601edb7"
 
 [[package]]
 name = "unicode-ident"

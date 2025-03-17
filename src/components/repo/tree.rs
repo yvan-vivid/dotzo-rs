@@ -1,3 +1,6 @@
+use derive_more::derive::Constructor;
+use tryiter::TryIteratorExt;
+
 use log::{debug, warn};
 use std::{
     collections::HashSet,
@@ -6,7 +9,7 @@ use std::{
 use thiserror::Error;
 
 use crate::{
-    components::repo::directory::{DirVisitor, IgnoreType, RepoDirItem, RepoDirItemWithPath},
+    components::repo::directory::{DirVisitation, IgnoreType, RepoDirItem, RepoDirItemWithPath},
     config::{file::ConfigFileReadError, spec::translate::SpecContext},
     mapping::{DotMap, DotMaps},
     util::fs::{DirectoryListing, MetadataChecks},
@@ -15,7 +18,10 @@ use crate::{
 use super::directory::RepoDirVisitorError;
 
 fn hash_set_to_string(hs: &HashSet<String>) -> String {
-    hs.iter().map(|s| format!("[{}]", s)).collect::<Vec<_>>().join(", ")
+    hs.iter()
+        .map(|s| format!("[{}]", s))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 pub struct DirData {
@@ -25,10 +31,10 @@ pub struct DirData {
 }
 
 impl DirData {
-    pub fn new<P: AsRef<Path>>(path: P, context: &SpecContext) -> Self {
+    pub fn new(path: PathBuf, context: &SpecContext) -> Self {
         Self {
-            path: path.as_ref().to_path_buf(),
-            expected_targets: context.targets.keys().map(String::from).collect(),
+            path,
+            expected_targets: context.targets.keys().map(ToOwned::to_owned).collect(),
             implicit_ignores: Default::default(),
         }
     }
@@ -36,7 +42,7 @@ impl DirData {
     pub fn report(&self) {
         if !self.implicit_ignores.is_empty() {
             warn!(
-                "The following in {:?} were not mentioned in .dot, and are being ignored implicitly.: {}",
+                "The following in {:?} were not mentioned in .dot, and are being ignored implicitly: {}",
                 self.path.display(),
                 hash_set_to_string(&self.implicit_ignores)
             );
@@ -68,72 +74,59 @@ pub type Result<T> = core::result::Result<T, TreeTraverserError>;
 
 #[derive(Debug)]
 pub struct TreeTraverser<'a, DL: DirectoryListing, MC: MetadataChecks> {
-    directory_listing: &'a DL,
-    metadata_checks: &'a MC,
+    visitor: DirVisitation<'a, MC, DL>,
 }
 
-fn consume_directory_item(
-    RepoDirItemWithPath { path, item }: RepoDirItemWithPath,
-    mapping: &mut DotMaps,
-    dir_data: &mut DirData,
-) -> Option<PathBuf> {
-    match item {
-        RepoDirItem::SubDir => Some(path),
-        RepoDirItem::Mapping(name, located_target) => {
-            let dot_map = DotMap::new(path.clone(), located_target);
-            debug!("adding: {} => {:?}", name, dot_map);
-            mapping.insert(path, dot_map);
-            dir_data.expected_targets.remove(&name);
-            None
-        }
-        RepoDirItem::Ignore(ig_type, name) => {
-            debug!("ignoring({:?}): {}", ig_type, name);
-            if ig_type == IgnoreType::Implicit {
-                dir_data.implicit_ignores.insert(name);
+#[derive(Constructor)]
+struct DirectoryItemConsumer<'a, 'b> {
+    mapping: &'a mut DotMaps,
+    dir_data: &'b mut DirData,
+}
+
+impl DirectoryItemConsumer<'_, '_> {
+    fn consume(
+        &mut self,
+        RepoDirItemWithPath { path, item }: RepoDirItemWithPath,
+    ) -> Option<PathBuf> {
+        match item {
+            RepoDirItem::SubDir => Some(path),
+            RepoDirItem::Mapping(name, located_target) => {
+                let dot_map = DotMap::new(path.clone(), located_target);
+                debug!("adding: {} => {:?}", name, dot_map);
+                self.mapping.insert(path, dot_map);
+                self.dir_data.expected_targets.remove(&name);
+                None
             }
-            None
+            RepoDirItem::Ignore(ig_type, name) => {
+                debug!("ignoring({:?}): {}", ig_type, name);
+                if ig_type == IgnoreType::Implicit {
+                    self.dir_data.implicit_ignores.insert(name);
+                }
+                None
+            }
         }
     }
 }
 
-impl<'b, 'a: 'b, DL: DirectoryListing, MC: MetadataChecks> TreeTraverser<'a, DL, MC> {
-    pub fn new(directory_listing: &'a DL, metadata_checks: &'a MC) -> Self {
+impl<'a, DL: DirectoryListing, MC: MetadataChecks> TreeTraverser<'a, DL, MC> {
+    pub fn new(metadata_checks: &'a MC, directory_listing: &'a DL) -> Self {
         Self {
-            directory_listing,
-            metadata_checks,
+            visitor: DirVisitation::new(metadata_checks, directory_listing),
         }
     }
 
-    fn visit_directory<P: AsRef<Path>>(
-        &self,
-        path: P,
-        context: &'b SpecContext,
-    ) -> Result<DirVisitor<'b, 'a, DL::Iter, MC>> {
-        Ok(DirVisitor::from_path(
-            path,
-            context,
-            self.metadata_checks,
-            self.directory_listing,
-        )?)
-    }
-
-    pub fn traverse<P: AsRef<Path>>(&self, root: P) -> Result<DotMaps> {
+    pub fn traverse(&self, root: impl AsRef<Path>) -> Result<DotMaps> {
         let mut mapping: DotMaps = Default::default();
         let mut stack = vec![root.as_ref().to_path_buf()];
         while let Some(current) = stack.pop() {
             debug!("Visiting directory: {:?}", current);
             let context = SpecContext::from_path(&current)?;
-            let mut dir_data = DirData::new(&current, &context);
-            for entry in self.visit_directory(&current, &context)?.filter_map(|visited| {
-                visited
-                    .map(|item| consume_directory_item(item, &mut mapping, &mut dir_data))
-                    .transpose()
-            }) {
-                match entry {
-                    Ok(path) => stack.push(path),
-                    Err(e) => return Err(e.into()),
-                }
-            }
+            let mut dir_data = DirData::new(current.clone(), &context);
+            let mut consumer = DirectoryItemConsumer::new(&mut mapping, &mut dir_data);
+            self.visitor
+                .visit(&current, &context)?
+                .try_filter_map(|item| Ok(consumer.consume(item)))
+                .try_for_each(|entry| entry.map(|path| stack.push(path)))?;
             dir_data.report();
         }
 

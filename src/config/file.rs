@@ -14,7 +14,8 @@ pub enum ConfigFormat {
     Yaml,
 }
 
-const FORMATS: &[(ConfigFormat, &str)] = &[(ConfigFormat::Yaml, "yaml"), (ConfigFormat::Json, "json")];
+const FORMATS: &[(ConfigFormat, &str)] =
+    &[(ConfigFormat::Yaml, "yaml"), (ConfigFormat::Json, "json")];
 
 #[derive(Debug, Clone, Constructor, PartialEq, Eq)]
 pub struct ConfigType {
@@ -47,7 +48,7 @@ pub enum ConfigFileReadError {
 
 pub type Result<T> = std::result::Result<T, ConfigFileReadError>;
 
-fn try_open_file<P: AsRef<Path>>(file_path: P) -> Result<Option<File>> {
+fn try_open_file(file_path: impl AsRef<Path>) -> Result<Option<File>> {
     File::open(file_path).map(Some).or_else(|e| {
         if ErrorKind::NotFound == e.kind() {
             Ok(None)
@@ -58,7 +59,7 @@ fn try_open_file<P: AsRef<Path>>(file_path: P) -> Result<Option<File>> {
 }
 
 impl ConfigFormat {
-    pub fn from_extension<S: AsRef<str>>(ext: S) -> Option<Self> {
+    pub fn from_extension(ext: impl AsRef<str>) -> Option<Self> {
         match ext.as_ref().to_lowercase().as_ref() {
             "json" => Some(Self::Json),
             "yaml" => Some(Self::Yaml),
@@ -84,7 +85,7 @@ impl ConfigType {
         Self::new(path, None)
     }
 
-    pub fn find_config_file<P: AsRef<Path>>(&self, path: P) -> Result<Option<ConfigFile>> {
+    pub fn find_config_file(&self, path: impl AsRef<Path>) -> Result<Option<ConfigFile>> {
         let path = path.as_ref();
         let base_path = path.join(&self.path);
         let mut file_paths: Vec<(ConfigFormat, PathBuf)> = FORMATS
@@ -106,7 +107,7 @@ impl ConfigType {
         Ok(None)
     }
 
-    pub fn override_config_file<P: AsRef<Path>>(&self, path: P) -> Option<ConfigFilePath> {
+    pub fn override_config_file(&self, path: impl AsRef<Path>) -> Option<ConfigFilePath> {
         let path = path.as_ref();
         path.extension()
             .and_then(|ext| ext.to_str())
@@ -117,7 +118,7 @@ impl ConfigType {
             })
     }
 
-    pub fn get_config_file<P: AsRef<Path>>(&self, path: P) -> Result<Option<ConfigFile>> {
+    pub fn get_config_file(&self, path: impl AsRef<Path>) -> Result<Option<ConfigFile>> {
         match self.override_config_file(path) {
             None => Ok(None),
             Some(ConfigFilePath { format, path }) => {
@@ -131,8 +132,12 @@ impl ConfigFile {
     pub fn read_config<C: DeserializeOwned>(&self) -> Result<C> {
         let reader = BufReader::new(&self.file);
         match self.format {
-            ConfigFormat::Json => serde_json::from_reader(reader).map_err(ConfigFileReadError::from),
-            ConfigFormat::Yaml => serde_yaml::from_reader(reader).map_err(ConfigFileReadError::from),
+            ConfigFormat::Json => {
+                serde_json::from_reader(reader).map_err(ConfigFileReadError::from)
+            }
+            ConfigFormat::Yaml => {
+                serde_yaml::from_reader(reader).map_err(ConfigFileReadError::from)
+            }
         }
     }
 }
@@ -141,13 +146,13 @@ pub trait ReadFromConfig: DeserializeOwned {
     fn config_type() -> ConfigType;
 
     #[allow(dead_code)]
-    fn read_from_path<P: AsRef<Path>>(path: P) -> Result<Option<Self>> {
+    fn read_from_path(path: impl AsRef<Path>) -> Result<Option<Self>> {
         Self::config_type()
             .get_config_file(path)
             .and_then(|m| m.map(|p| p.read_config()).transpose())
     }
 
-    fn find_in_path<P: AsRef<Path>>(path: P) -> Result<Option<Self>> {
+    fn find_in_path(path: impl AsRef<Path>) -> Result<Option<Self>> {
         Self::config_type()
             .find_config_file(path)
             .and_then(|m| m.map(|p| p.read_config()).transpose())

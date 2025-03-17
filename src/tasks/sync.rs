@@ -49,7 +49,7 @@ pub fn sync_task<'a, APP: App<'a>>(app: &'a APP, _cli: &Cli, dotzo: Dotzo) -> Re
     // Components
     let linker = DotLinker::new(app.metadata_checks(), app.link_reader());
     let link_creator = LinkCreator::new(app.metadata_checks(), app.link_reader(), app.actions());
-    let traverser = TreeTraverser::new(app.directory_listing(), app.metadata_checks());
+    let traverser = TreeTraverser::new(app.metadata_checks(), app.directory_listing());
     let prompting = app.prompter();
     let checks = app.structure_check();
     let repo_checks = app.repo_structure_check();

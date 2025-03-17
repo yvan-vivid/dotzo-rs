@@ -45,12 +45,12 @@ pub struct DirVisitor<'a, 'b: 'a, ID: DirEntryIterator, MC: MetadataChecks> {
 }
 
 impl<'a, 'b: 'a, ID: DirEntryIterator, MC: MetadataChecks> DirVisitor<'a, 'b, ID, MC> {
-    fn visit<P: AsRef<Path>>(&self, path: P) -> Result<RepoDirItem> {
+    fn visit(&self, path: impl AsRef<Path>) -> Result<RepoDirItem> {
         let path = path.as_ref();
         path.file_name()
             .and_then(|n| n.to_str())
             .ok_or_else(|| RepoDirVisitorError::CannotGetFileName(path.to_path_buf()))
-            .map(|name| name.to_owned())
+            .map(ToOwned::to_owned)
             .map(|file_name| {
                 if file_name.starts_with(".") {
                     RepoDirItem::Ignore(IgnoreType::Dot, file_name)
@@ -65,19 +65,6 @@ impl<'a, 'b: 'a, ID: DirEntryIterator, MC: MetadataChecks> DirVisitor<'a, 'b, ID
                 }
             })
     }
-
-    pub fn from_path<DL: DirectoryListing<Iter = ID>, P: AsRef<Path>>(
-        path: P,
-        context: &'a SpecContext,
-        directory_check: &'b MC,
-        directory_listing: &DL,
-    ) -> Result<Self> {
-        Ok(DirVisitor::new(
-            directory_listing.read_dir(path)?,
-            context,
-            directory_check,
-        ))
-    }
 }
 
 impl<ID: DirEntryIterator, MC: MetadataChecks> Iterator for DirVisitor<'_, '_, ID, MC> {
@@ -85,9 +72,31 @@ impl<ID: DirEntryIterator, MC: MetadataChecks> Iterator for DirVisitor<'_, '_, I
 
     fn next(&mut self) -> Option<Self::Item> {
         self.contents.next().map(|e| {
-            e.map_err(|i| i.into())
-                .and_then(|path| self.visit(&path).map(|item| RepoDirItemWithPath::new(path, item)))
+            e.map_err(|i| i.into()).and_then(|path| {
+                self.visit(&path)
+                    .map(|item| RepoDirItemWithPath::new(path, item))
+            })
         })
+    }
+}
+
+#[derive(Debug, Constructor)]
+pub struct DirVisitation<'a, MC: MetadataChecks, DL: DirectoryListing> {
+    metadata_checks: &'a MC,
+    directory_listing: &'a DL,
+}
+
+impl<'b, MC: MetadataChecks, DL: DirectoryListing> DirVisitation<'b, MC, DL> {
+    pub fn visit<'a, P: AsRef<Path>>(
+        &self,
+        path: P,
+        context: &'a SpecContext,
+    ) -> Result<DirVisitor<'a, 'b, DL::Iter, MC>> {
+        Ok(DirVisitor::new(
+            self.directory_listing.read_dir(path)?,
+            context,
+            self.metadata_checks,
+        ))
     }
 }
 
@@ -149,10 +158,8 @@ mod test {
 
         let test_context = SpecContext::new(test_spec);
         let visitor = DirVisitor::new(test_entries.into_iter(), &test_context, &*TEST_TREE);
-        match visitor.collect::<Result<Vec<_>>>() {
-            Ok(actual) => assert_eq!(expected, actual),
-            Err(e) => panic!("Result type Err: {:?}", e),
-        }
+        let result = visitor.collect::<Result<Vec<_>>>();
+        assert!(matches!(result, Ok(actual) if actual == expected));
     }
 
     #[test]
@@ -171,7 +178,10 @@ mod test {
                 "path/to/in_home".into(),
                 RepoDirItem::Mapping(
                     "in_home".into(),
-                    LocatedTarget::new(Target::new("in_home".into(), None), crate::mapping::Destination::Home),
+                    LocatedTarget::new(
+                        Target::new("in_home".into(), None),
+                        crate::mapping::Destination::Home,
+                    ),
                 ),
             ),
             RepoDirItemWithPath::new(
@@ -208,10 +218,8 @@ mod test {
 
         let test_context = SpecContext::new(TEST_SPEC.clone());
         let visitor = DirVisitor::new(test_entries.into_iter(), &test_context, &*TEST_TREE);
-        match visitor.collect::<Result<Vec<_>>>() {
-            Ok(actual) => assert_eq!(expected, actual),
-            Err(e) => panic!("Result type Err: {:?}", e),
-        }
+        let result = visitor.collect::<Result<Vec<_>>>();
+        assert!(matches!(result, Ok(actual) if actual == expected));
     }
 
     #[test]
@@ -224,13 +232,10 @@ mod test {
 
         let test_context = SpecContext::new(TEST_SPEC.clone());
         let visitor = DirVisitor::new(test_entries.into_iter(), &test_context, &*TEST_TREE);
-        match visitor.collect::<Result<Vec<_>>>() {
-            Err(RepoDirVisitorError::Io(e)) => {
-                assert_eq!(std::io::ErrorKind::Other, e.kind());
-                assert_eq!("an io error", e.to_string());
-            }
-            Err(e) => panic!("Result type Err: {:?}", e),
-            Ok(value) => panic!("Didn't expect Ok: {:?}", value),
-        }
+        let result = visitor.collect::<Result<Vec<_>>>();
+        assert!(matches!(
+            result,
+            Err(RepoDirVisitorError::Io(e)) 
+            if e.kind() == std::io::ErrorKind::Other && e.to_string() == "an io error"));
     }
 }
